@@ -8,6 +8,8 @@ Item {
 
     property bool open: false
     property int cardWidth: 440
+    // -1 centres the card; a value pins its top, like a launcher.
+    property int cardTop: -1
     property real reveal: 0
     default property alias content: column.data
     readonly property alias card: card
@@ -47,9 +49,10 @@ Item {
         id: card
 
         width: Math.min(root.cardWidth, root.width - 32)
-        height: Math.min(column.implicitHeight + 48, root.height - 32)
+        height: Math.min(column.implicitHeight + 48, root.height - (root.cardTop >= 0 ? root.cardTop : 16) - 16)
+        clip: true
         x: Math.round((root.width - width) / 2)
-        y: Math.round((root.height - height) / 2)
+        y: root.cardTop >= 0 ? root.cardTop : Math.round((root.height - height) / 2)
         radius: Theme.radius
         color: Theme.panelBg
         border.width: 1

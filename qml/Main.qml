@@ -25,6 +25,9 @@ Window {
     // The first job waiting for an answer about an existing file, if any.
     readonly property var conflict: Jobs.items.find(job => job.state === "conflict") ?? null
     property bool conflictForAll: false
+    property bool jumping: false
+    property var jumpResults: []
+    property int jumpIndex: 0
     property bool failed: false
     property var places: Files.places()
     property var board: Files.clipboard()
@@ -140,6 +143,31 @@ Window {
         else
             return
         closeSheet()
+    }
+
+    function openJump() {
+        jumpField.text = ""
+        jumpResults = Jump.search("")
+        jumpIndex = 0
+        jumping = true
+        jumpField.input.forceActiveFocus()
+    }
+
+    function closeJump() {
+        jumping = false
+        if (pane)
+            pane.focusList()
+    }
+
+    function takeJump(inNewTab) {
+        const hit = jumpResults[jumpIndex]
+        closeJump()
+        if (!hit)
+            return
+        if (inNewTab)
+            newTab(hit.path)
+        else
+            pane.navigate(hit.path)
     }
 
     function answerConflict(answer) {
@@ -262,6 +290,7 @@ Window {
     Shortcut { sequence: "Ctrl+F"; onActivated: win.pane.focusFilter() }
     Shortcut { sequence: "Ctrl+Q"; onActivated: win.close() }
     Shortcut { sequence: "Ctrl+Z"; onActivated: Undo.undo() }
+    Shortcut { sequences: ["Ctrl+K", "Ctrl+P"]; onActivated: win.openJump() }
     Shortcut { sequence: "Ctrl+T"; onActivated: win.newTab(win.pane.path) }
     Shortcut { sequence: "Ctrl+W"; onActivated: win.closeTab(win.tabIndex) }
     Shortcut { sequences: ["Ctrl+Tab", "Ctrl+PgDown"]; onActivated: win.switchTab((win.tabIndex + 1) % tabModel.count) }
@@ -663,6 +692,119 @@ Window {
                 danger: ["delete", "purge", "empty"].includes(win.sheet)
                 onClicked: win.confirmSheet()
             }
+        }
+    }
+
+    Sheet {
+        id: jumpSheet
+
+        open: win.jumping
+        cardWidth: 600
+        cardTop: Math.round(win.height * 0.16)
+        onDismissed: win.closeJump()
+
+        Field {
+            id: jumpField
+
+            width: parent.width
+            height: 42
+            glyph: Util.glyphs.jump
+            placeholder: "Zu Ordner springen …"
+            input.font.pixelSize: 15
+
+            onTextChanged: {
+                win.jumpResults = Jump.search(text)
+                win.jumpIndex = 0
+            }
+            onKeyPressed: event => {
+                const count = win.jumpResults.length
+                if (event.key === Qt.Key_Down || (event.key === Qt.Key_J && event.modifiers & Qt.ControlModifier))
+                    win.jumpIndex = count ? (win.jumpIndex + 1) % count : 0
+                else if (event.key === Qt.Key_Up || (event.key === Qt.Key_K && event.modifiers & Qt.ControlModifier))
+                    win.jumpIndex = count ? (win.jumpIndex + count - 1) % count : 0
+                else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                    win.takeJump(event.modifiers & (Qt.ControlModifier | Qt.ShiftModifier))
+                else if (event.key === Qt.Key_Escape)
+                    win.closeJump()
+                else
+                    return
+                event.accepted = true
+            }
+        }
+
+        Column {
+            width: parent.width
+
+            Repeater {
+                // As many hits as fit below the field, so the card never runs off the window.
+                model: win.jumpResults.slice(0, Math.max(3, Math.floor((win.height * 0.84 - 200) / 42)))
+
+                Rectangle {
+                    id: hit
+
+                    required property var modelData
+                    required property int index
+                    readonly property bool current: index === win.jumpIndex
+
+                    width: parent.width
+                    height: 42
+                    radius: Theme.control
+                    color: current ? Qt.alpha(Theme.accent, 0.13) : hitPointer.containsMouse ? Qt.alpha(Theme.fg, 0.04) : "transparent"
+                    Behavior on color { ColorAnimation { duration: Theme.quickMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Util.quick } }
+
+                    FileIcon {
+                        id: hitIcon
+                        x: 12
+                        width: 16
+                        height: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        kind: "folder"
+                    }
+
+                    Text {
+                        id: hitName
+                        anchors.left: hitIcon.right
+                        anchors.leftMargin: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: hit.modelData.name
+                        color: Theme.fg
+                        font.family: Theme.fontUi
+                        font.pixelSize: 13
+                        font.weight: hit.current ? Font.DemiBold : Font.Normal
+                    }
+
+                    Text {
+                        anchors.left: hitName.right
+                        anchors.leftMargin: 10
+                        anchors.right: parent.right
+                        anchors.rightMargin: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: hit.modelData.parent
+                        elide: Text.ElideLeft
+                        color: Theme.fgMuted
+                        font.family: Theme.fontMono
+                        font.pixelSize: 11
+                    }
+
+                    MouseArea {
+                        id: hitPointer
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            win.jumpIndex = hit.index
+                            win.takeJump(false)
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: win.jumpResults.length ? "↑ ↓  Auswählen     Enter  Springen     Strg+Enter  Neuer Tab" : "Kein passender Ordner"
+            color: Theme.fgMuted
+            font.family: Theme.fontUi
+            font.pixelSize: 11
         }
     }
 

@@ -17,6 +17,7 @@ sys.path.insert(0, str(HERE))
 from core import trash  # noqa: E402
 from core.files import HOME, Files  # noqa: E402
 from core.jobs import Jobs  # noqa: E402
+from core.jump import Jump  # noqa: E402
 from core.undo import Undo  # noqa: E402
 from core.theme import Theme  # noqa: E402
 
@@ -52,9 +53,8 @@ def main():
     sys.exit(app.exec())
 
 
-def build_engine(start):
-    """Registers the backend and loads the window; the offscreen render check uses this too."""
-    # Module-level so Python keeps the singletons alive as long as QML uses them.
+def backend():
+    """Creates and registers the QML singletons; kept module-level so Python keeps them alive."""
     global _backend
     theme = Theme()
     jobs = Jobs(trash.trash)
@@ -63,9 +63,15 @@ def build_engine(start):
     undo = Undo(trash.trash, trash.restore)
     files.recorded.connect(undo.push)
     jobs.finished.connect(lambda _ok, _text, _last, label, steps: undo.push(label, steps))
-    _backend = [theme, jobs, files, undo]
+    _backend = [theme, jobs, files, undo, Jump(HOME)]
     for obj in _backend:
         qmlRegisterSingletonInstance(type(obj), "Filyy", 1, 0, type(obj).__name__, obj)
+    return _backend
+
+
+def build_engine(start):
+    """Loads the window; the offscreen render check uses this too."""
+    backend()
     engine = QQmlApplicationEngine()
     engine.setInitialProperties({"startPath": start if os.path.isdir(start) else HOME})
     engine.load(str(HERE / "qml/Main.qml"))

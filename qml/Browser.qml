@@ -65,6 +65,8 @@ FocusScope {
     // A folder change, with the settings' page entrance; reload() is the quiet variant.
     function open(target) {
         path = target
+        if (target !== app.trashPath)
+            Jump.record(target)
         filterField.text = ""
         editingPath = false
         picked = {}

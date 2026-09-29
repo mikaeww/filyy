@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core import trash as trashcan
 from core.jobs import CHUNK, KEEP_BOTH, REPLACE, SKIP, Job
+from core.jump import fuzzy, rank
 from core.undo import revert
 from core.fs import checked_name, human, listing
 from core.theme import preset_colors, shell_theme
@@ -44,6 +45,7 @@ def main():
         trash(Path(tmp))
     with tempfile.TemporaryDirectory() as tmp:
         undo(Path(tmp))
+    jump()
     print("ok")
 
 
@@ -151,6 +153,16 @@ def undo(root):
         raise AssertionError("undo overwrote a file")
     except FileExistsError:
         pass
+
+
+def jump():
+    assert fuzzy("prfil", "/home/m/Projekte/Apps/filyy") > 0
+    assert fuzzy("xyz", "/home/m/Projekte") == 0
+    assert fuzzy("bild", "/home/m/Bilder") > fuzzy("bild", "/home/m/Projekte/Apps/filyy/bild-tools")
+    now = 1_000_000
+    visits = {"/h/Projekte/filyy": {"visits": 20, "last": now - 60}, "/h/Projekte/fabric": {"visits": 1, "last": now - 10**7}}
+    assert rank("f", visits, ["/h/Fotos"], now)[0] == "/h/Projekte/filyy", "frecency beats a fresh scan hit"
+    assert rank("", visits, [], now) == ["/h/Projekte/filyy", "/h/Projekte/fabric"]
 
 
 if __name__ == "__main__":
