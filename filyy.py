@@ -17,6 +17,7 @@ sys.path.insert(0, str(HERE))
 from core import trash  # noqa: E402
 from core.files import HOME, Files  # noqa: E402
 from core.jobs import Jobs  # noqa: E402
+from core.gitinfo import Git  # noqa: E402
 from core.jump import Jump  # noqa: E402
 from core.preview import Preview  # noqa: E402
 from core.rename import Rename  # noqa: E402
@@ -67,7 +68,7 @@ def backend():
     jobs.finished.connect(lambda _ok, _text, _last, label, steps: undo.push(label, steps))
     rename = Rename()
     rename.done.connect(lambda ok, _text, steps: undo.push("Umbenennen", steps) if ok else None)
-    _backend = [theme, jobs, files, undo, Jump(HOME), rename, Preview(theme)]
+    _backend = [theme, jobs, files, undo, Jump(HOME), rename, Preview(theme), Git()]
     for obj in _backend:
         qmlRegisterSingletonInstance(type(obj), "Filyy", 1, 0, type(obj).__name__, obj)
     return _backend

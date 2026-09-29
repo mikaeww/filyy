@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core import trash as trashcan
 from core.jobs import CHUNK, KEEP_BOTH, REPLACE, SKIP, Job
+from core.gitinfo import info as git_info
 from core.jump import fuzzy, rank
 from core.rename import apply as apply_rename, kebab, plan
 from core.undo import revert
@@ -49,6 +50,8 @@ def main():
     jump()
     with tempfile.TemporaryDirectory() as tmp:
         rename(Path(tmp))
+    with tempfile.TemporaryDirectory() as tmp:
+        git(Path(tmp))
     print("ok")
 
 
@@ -186,6 +189,21 @@ def rename(root):
     swap = [dict(r, new=n) for r, n in zip(plan([str(root / "a.txt"), str(root / "b.txt")]), ("b.txt", "a.txt"))]
     apply_rename(swap)
     assert (root / "a.txt").read_text() == "b.txt" and (root / "b.txt").read_text() == "a.txt"
+
+
+def git(root):
+    import subprocess
+    assert git_info(str(root)) == {}, "no card outside a repository"
+    run_git = lambda *a: subprocess.run(["git", "-C", str(root), *a], check=True, capture_output=True)
+    run_git("init", "-q", "-b", "main")
+    assert git_info(str(root))["hash"] == "", "a fresh repository has no commit yet"
+    (root / "a.txt").write_text("a")
+    run_git("add", "a.txt")
+    run_git("-c", "user.name=Test", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "Erster Commit")
+    (root / "b.txt").write_text("b")
+    got = git_info(str(root / ""))
+    assert got["branch"] == "main" and got["subject"] == "Erster Commit" and got["author"] == "Test", got
+    assert got["changes"] == 1 and got["time"] > 0
 
 
 if __name__ == "__main__":

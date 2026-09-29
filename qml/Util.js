@@ -29,6 +29,20 @@ function visit(state, path) {
     return { list: list, index: list.length - 1 }
 }
 
+// "vor 5 Min" style relative time for a unix timestamp in seconds.
+function ago(seconds) {
+    if (!seconds)
+        return ""
+    var diff = Math.max(0, Date.now() / 1000 - seconds)
+    var steps = [[60, "gerade eben", 1], [3600, "Min", 60], [86400, "Std", 3600], [604800, "Tagen", 86400],
+                 [2629800, "Wochen", 604800], [31557600, "Monaten", 2629800], [Infinity, "Jahren", 31557600]]
+    for (var i = 0; i < steps.length; i++) {
+        if (diff < steps[i][0])
+            return i === 0 ? steps[i][1] : "vor " + Math.floor(diff / steps[i][2]) + " " + steps[i][1]
+    }
+    return ""
+}
+
 function size(bytes) {
     var units = ["B", "KB", "MB", "GB", "TB"]
     var unit = 0

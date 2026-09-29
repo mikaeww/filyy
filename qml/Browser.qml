@@ -25,6 +25,7 @@ FocusScope {
     property int anchor: 0
     property string pendingSelect: ""
     property bool editingPath: false
+    property var git: ({})
     readonly property bool isTrash: path === app.trashPath
 
     readonly property var shown: {
@@ -65,8 +66,11 @@ FocusScope {
     // A folder change, with the settings' page entrance; reload() is the quiet variant.
     function open(target) {
         path = target
-        if (target !== app.trashPath)
+        git = ({})
+        if (target !== app.trashPath) {
             Jump.record(target)
+            Git.request(target)
+        }
         filterField.text = ""
         editingPath = false
         picked = {}
@@ -178,11 +182,22 @@ FocusScope {
     }
 
     Connections {
+        target: Git
+
+        function onReady(folder, info) {
+            if (folder === root.path)
+                root.git = info
+        }
+    }
+
+    Connections {
         target: Files
 
         function onFolderChanged(changed) {
-            if (changed === root.path)
+            if (changed === root.path) {
                 root.reload()
+                Git.request(root.path)
+            }
         }
 
         function onDone(ok, text, select) {
@@ -535,6 +550,8 @@ FocusScope {
             boundsBehavior: Flickable.StopAtBounds
             clip: true
             reuseItems: true
+            // The last rows can scroll above the git card instead of hiding under it.
+            bottomMargin: gitCard.shown ? gitCard.height + 16 : 0
 
             EmptyArea { parent: list }
 
@@ -640,6 +657,7 @@ FocusScope {
             boundsBehavior: Flickable.StopAtBounds
             clip: true
             reuseItems: true
+            bottomMargin: gitCard.shown ? gitCard.height + 16 : 0
 
             EmptyArea { parent: grid }
 
@@ -855,6 +873,16 @@ FocusScope {
                 font.pixelSize: 12
             }
         }
+    }
+
+    GitCard {
+        id: gitCard
+        x: root.padding
+        anchors.bottom: footer.top
+        anchors.bottomMargin: 12
+        z: 3
+        width: Math.min(300, root.width - 2 * root.padding)
+        info: root.git
     }
 
     Item {
