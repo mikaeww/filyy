@@ -17,6 +17,7 @@ sys.path.insert(0, str(HERE))
 from core import trash  # noqa: E402
 from core.files import HOME, Files  # noqa: E402
 from core.jobs import Jobs  # noqa: E402
+from core.undo import Undo  # noqa: E402
 from core.theme import Theme  # noqa: E402
 
 
@@ -58,7 +59,11 @@ def build_engine(start):
     theme = Theme()
     jobs = Jobs(trash.trash)
     QGuiApplication.instance().aboutToQuit.connect(jobs.shutdown)
-    _backend = [theme, jobs, Files(theme, jobs)]
+    files = Files(theme, jobs)
+    undo = Undo(trash.trash, trash.restore)
+    files.recorded.connect(undo.push)
+    jobs.finished.connect(lambda _ok, _text, _last, label, steps: undo.push(label, steps))
+    _backend = [theme, jobs, files, undo]
     for obj in _backend:
         qmlRegisterSingletonInstance(type(obj), "Filyy", 1, 0, type(obj).__name__, obj)
     engine = QQmlApplicationEngine()

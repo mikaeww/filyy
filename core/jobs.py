@@ -217,8 +217,8 @@ class Jobs(QObject):
     """The running jobs as a list QML can bind to, refreshed ten times a second while any exist."""
 
     changed = Signal()
-    # ok, message, path to select, undo log
-    finished = Signal(bool, str, str, "QVariantList")
+    # ok, message, path to select, undo label, undo steps
+    finished = Signal(bool, str, str, str, "QVariantList")
 
     def __init__(self, trash):
         super().__init__()
@@ -281,10 +281,11 @@ class Jobs(QObject):
             if job.state in ("done", "failed", "cancelled"):
                 del self._jobs[job_id]
                 verb = {"copy": "Kopiert", "move": "Verschoben", "duplicate": "Dupliziert"}[job.kind]
+                label = {"copy": "Kopieren", "move": "Verschieben", "duplicate": "Duplizieren"}[job.kind]
                 ok = job.state == "done"
                 text = job.error if job.state == "failed" else "Abgebrochen" if job.state == "cancelled" else \
                     f"{verb}: {len(job.sources)} Element{'e' if len(job.sources) != 1 else ''}"
-                self.finished.emit(ok, text, job.last, [list(entry) for entry in job.log])
+                self.finished.emit(ok, text, job.last, label, [list(entry) for entry in job.log])
                 continue
             elapsed = max(0.1, time.monotonic() - job.started)
             items.append({"id": job_id, "kind": job.kind, "state": job.state, "count": len(job.sources),

@@ -19,13 +19,15 @@ class Files(QObject):
     folderChanged = Signal(str)
     # ok, message, path to select afterwards ("" for none)
     done = Signal(bool, str, str)
+    # undo label, steps (see core/undo.py)
+    recorded = Signal(str, "QVariantList")
     clipboardChanged = Signal()
 
     def __init__(self, theme, jobs):
         super().__init__()
         self._theme = theme
         self._jobs = jobs
-        jobs.finished.connect(lambda ok, text, last, _log: self.done.emit(ok, text, last))
+        jobs.finished.connect(lambda ok, text, last, _label, _steps: self.done.emit(ok, text, last))
         self._watcher = QFileSystemWatcher(self)
         self._debounce = QTimer(self, singleShot=True, interval=150)
         self._debounce.timeout.connect(lambda: self.folderChanged.emit(self._watched))
@@ -91,44 +93,50 @@ class Files(QObject):
         subprocess.Popen([terminal], cwd=folder, start_new_session=True,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    def _run(self, work, message):
-        """Runs work() off the UI thread; it returns the path to select."""
+    def _run(self, work, message, label=""):
+        """Runs work(steps) off the UI thread; it returns the path to select and appends undo steps."""
         def body():
+            steps = []
             try:
-                self.done.emit(True, message, work() or "")
+                select = work(steps)
+                self.done.emit(True, message, select or "")
             except (OSError, ValueError) as error:
                 self.done.emit(False, str(error), "")
+            if label and steps:
+                self.recorded.emit(label, [list(step) for step in steps])
         threading.Thread(target=body, daemon=True).start()
 
     @Slot(str, str)
     def mkdir(self, folder, name):
-        def work():
+        def work(steps):
             target = os.path.join(folder, checked_name(name))
             os.mkdir(target)
+            steps.append(("created", target))
             return target
-        self._run(work, "Ordner erstellt")
+        self._run(work, "Ordner erstellt", "Neuer Ordner")
 
     @Slot(str, str)
     def rename(self, path, name):
-        def work():
+        def work(steps):
             target = os.path.join(os.path.dirname(path), checked_name(name))
             if target != path:
                 if os.path.lexists(target):
                     raise FileExistsError("Der Name ist schon vergeben")
                 os.rename(path, target)
+                steps.append(("renamed", path, target))
             return target
-        self._run(work, "Umbenannt")
+        self._run(work, "Umbenannt", "Umbenennen")
 
     @Slot("QVariantList")
     def trash(self, paths):
-        def work():
+        def work(steps):
             for path in paths:
-                trashcan.trash(path)
-        self._run(work, f"{len(paths)} in den Papierkorb gelegt")
+                steps.append(("trashed", path, trashcan.trash(path)))
+        self._run(work, f"{len(paths)} in den Papierkorb gelegt", "Papierkorb")
 
     @Slot("QVariantList")
     def remove(self, paths):
-        def work():
+        def work(steps):
             for path in paths:
                 if os.path.isdir(path) and not os.path.islink(path):
                     shutil.rmtree(path)

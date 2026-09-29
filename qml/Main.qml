@@ -177,6 +177,7 @@ Window {
                 { label: "Neuer Ordner", glyph: Util.glyphs.newFolder, hint: "Strg+Shift+N", run: () => openSheet("mkdir") },
                 { label: "Einfügen", glyph: Util.glyphs.paste, hint: "Strg+V", enabled: has, run: () => Files.paste(p.path) },
                 { label: "Terminal hier", glyph: Util.glyphs.terminal, hint: "Shift+F4", run: () => Files.terminal(p.path) },
+                { label: Undo.label ? "Rückgängig: " + Undo.label : "Rückgängig", glyph: Util.glyphs.undo, hint: "Strg+Z", enabled: Undo.label !== "", run: () => Undo.undo() },
                 { separator: true },
                 { label: p.showHidden ? "Versteckte ausblenden" : "Versteckte zeigen", glyph: p.showHidden ? Util.glyphs.eyeOff : Util.glyphs.eye, hint: "Strg+H", run: () => p.toggleHidden() },
                 { label: p.view === "list" ? "Als Raster" : "Als Liste", glyph: p.view === "list" ? Util.glyphs.grid : Util.glyphs.list, hint: p.view === "list" ? "Strg+2" : "Strg+1", run: () => p.view = p.view === "list" ? "grid" : "list" },
@@ -236,9 +237,18 @@ Window {
         }
     }
 
+    Connections {
+        target: Undo
+
+        function onDone(ok, text) {
+            win.say(text, !ok)
+        }
+    }
+
     Shortcut { sequence: "Ctrl+L"; onActivated: win.pane.editPath() }
     Shortcut { sequence: "Ctrl+F"; onActivated: win.pane.focusFilter() }
     Shortcut { sequence: "Ctrl+Q"; onActivated: win.close() }
+    Shortcut { sequence: "Ctrl+Z"; onActivated: Undo.undo() }
     Shortcut { sequence: "Ctrl+T"; onActivated: win.newTab(win.pane.path) }
     Shortcut { sequence: "Ctrl+W"; onActivated: win.closeTab(win.tabIndex) }
     Shortcut { sequences: ["Ctrl+Tab", "Ctrl+PgDown"]; onActivated: win.switchTab((win.tabIndex + 1) % tabModel.count) }

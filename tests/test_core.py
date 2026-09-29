@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core import trash as trashcan
 from core.jobs import CHUNK, KEEP_BOTH, REPLACE, SKIP, Job
+from core.undo import revert
 from core.fs import checked_name, human, listing
 from core.theme import preset_colors, shell_theme
 
@@ -41,6 +42,8 @@ def main():
     assert human(512) == "512 B" and human(1536) == "1.5 KB"
     with tempfile.TemporaryDirectory() as tmp:
         trash(Path(tmp))
+    with tempfile.TemporaryDirectory() as tmp:
+        undo(Path(tmp))
     print("ok")
 
 
@@ -117,6 +120,37 @@ def trash(root):
         pass
     trashcan.purge(second, str(bin_dir))
     assert trashcan.entries(str(bin_dir)) == []
+
+
+
+def undo(root):
+    bin_dir, a, b = root / "bin", root / "a", root / "b"
+    a.mkdir()
+    b.mkdir()
+    (a / "one.txt").write_text("one")
+    (a / "two.txt").write_text("two")
+    (b / "two.txt").write_text("old two")
+    to_bin = lambda p: trashcan.trash(p, str(bin_dir))
+    from_bin = lambda p: trashcan.restore(p, str(bin_dir))
+    before = {str(p.relative_to(root)): p.read_text() for p in root.rglob("*.txt")}
+
+    copied = run("copy", [a / "one.txt"], b, bin_dir)
+    replaced = run("copy", [a / "two.txt"], b, bin_dir, policy=REPLACE)
+    moved = run("move", [a / "one.txt"], b / "..", bin_dir)
+    os.rename(root / "one.txt", root / "uno.txt")
+    renamed = [("renamed", str(root / "one.txt"), str(root / "uno.txt"))]
+    assert (b / "two.txt").read_text() == "two" and not (a / "one.txt").exists()
+
+    for steps in (renamed, moved.log, replaced.log, copied.log):
+        revert(steps, to_bin, from_bin)
+    after = {str(p.relative_to(root)): p.read_text() for p in root.rglob("*.txt") if bin_dir not in p.parents}
+    assert after == before, (after, before)
+    try:
+        (a / "one.txt").write_text("blocker")
+        revert([("moved", str(a / "one.txt"), str(a / "two.txt"))], to_bin, from_bin)
+        raise AssertionError("undo overwrote a file")
+    except FileExistsError:
+        pass
 
 
 if __name__ == "__main__":
