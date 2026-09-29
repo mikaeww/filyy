@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from core import trash as trashcan
 from core.jobs import CHUNK, KEEP_BOTH, REPLACE, SKIP, Job
 from core.jump import fuzzy, rank
+from core.rename import apply as apply_rename, kebab, plan
 from core.undo import revert
 from core.fs import checked_name, human, listing
 from core.theme import preset_colors, shell_theme
@@ -46,6 +47,8 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         undo(Path(tmp))
     jump()
+    with tempfile.TemporaryDirectory() as tmp:
+        rename(Path(tmp))
     print("ok")
 
 
@@ -163,6 +166,26 @@ def jump():
     visits = {"/h/Projekte/filyy": {"visits": 20, "last": now - 60}, "/h/Projekte/fabric": {"visits": 1, "last": now - 10**7}}
     assert rank("f", visits, ["/h/Fotos"], now)[0] == "/h/Projekte/filyy", "frecency beats a fresh scan hit"
     assert rank("", visits, [], now) == ["/h/Projekte/filyy", "/h/Projekte/fabric"]
+
+
+def rename(root):
+    for name in ("IMG_001.JPG", "IMG_002.JPG", "a.txt", "b.txt"):
+        (root / name).write_text(name)
+    photos = [str(root / "IMG_001.JPG"), str(root / "IMG_002.JPG")]
+    rows = plan(photos, find="IMG_", replace="", template="urlaub-{n}", case="kebab")
+    assert [r["new"] for r in rows] == ["urlaub-1.jpg", "urlaub-2.jpg"], rows
+    assert plan(photos * 1, template="gleich")[0]["error"] == "Doppelter Name"
+    assert plan([str(root / "a.txt")], template="b")[0]["error"] == "Name ist schon vergeben"
+    assert plan([str(root / "a.txt")], find="(", regex=True)[0]["error"].startswith("Regex")
+    assert kebab("Mein Urlaub_2026 Bild") == "mein-urlaub-2026-bild" and kebab("fooBar") == "foo-bar"
+    steps = apply_rename(rows)
+    assert sorted(p.name for p in root.iterdir()) == ["a.txt", "b.txt", "urlaub-1.jpg", "urlaub-2.jpg"]
+    revert(steps, None, None)
+    assert (root / "IMG_001.JPG").read_text() == "IMG_001.JPG"
+    # A swap needs the two-phase rename.
+    swap = [dict(r, new=n) for r, n in zip(plan([str(root / "a.txt"), str(root / "b.txt")]), ("b.txt", "a.txt"))]
+    apply_rename(swap)
+    assert (root / "a.txt").read_text() == "b.txt" and (root / "b.txt").read_text() == "a.txt"
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ from core import trash  # noqa: E402
 from core.files import HOME, Files  # noqa: E402
 from core.jobs import Jobs  # noqa: E402
 from core.jump import Jump  # noqa: E402
+from core.rename import Rename  # noqa: E402
 from core.undo import Undo  # noqa: E402
 from core.theme import Theme  # noqa: E402
 
@@ -63,7 +64,9 @@ def backend():
     undo = Undo(trash.trash, trash.restore)
     files.recorded.connect(undo.push)
     jobs.finished.connect(lambda _ok, _text, _last, label, steps: undo.push(label, steps))
-    _backend = [theme, jobs, files, undo, Jump(HOME)]
+    rename = Rename()
+    rename.done.connect(lambda ok, _text, steps: undo.push("Umbenennen", steps) if ok else None)
+    _backend = [theme, jobs, files, undo, Jump(HOME), rename]
     for obj in _backend:
         qmlRegisterSingletonInstance(type(obj), "Filyy", 1, 0, type(obj).__name__, obj)
     return _backend

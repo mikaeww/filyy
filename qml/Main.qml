@@ -25,6 +25,12 @@ Window {
     // The first job waiting for an answer about an existing file, if any.
     readonly property var conflict: Jobs.items.find(job => job.state === "conflict") ?? null
     property bool conflictForAll: false
+    property bool renaming: false
+    property var renameTargets: []
+    property var renameRows: []
+    property var renameOptions: ({ find: "", replace: "", regex: false, template: "{name}", start: 1, case: "" })
+    readonly property int renameErrors: renameRows.filter(row => row.error).length
+    readonly property int renameChanges: renameRows.filter(row => row.new !== row.old && !row.error).length
     property bool jumping: false
     property var jumpResults: []
     property int jumpIndex: 0
@@ -109,8 +115,8 @@ Window {
         const targets = !pane ? [] : kind === "empty" ? pane.entries.map(entry => entry.path) : pane.targets
         if (kind !== "mkdir" && targets.length === 0)
             return
-        if (kind === "rename" && targets.length !== 1)
-            return say("Umbenennen geht nur mit einem Element", true)
+        if (kind === "rename" && targets.length > 1)
+            return openBatchRename(targets)
         sheetTargets = targets
         sheet = kind
         sheetField.text = kind === "rename" ? sheetTargets[0].slice(sheetTargets[0].lastIndexOf("/") + 1) : ""
@@ -143,6 +149,38 @@ Window {
         else
             return
         closeSheet()
+    }
+
+    function openBatchRename(targets) {
+        renameTargets = targets
+        renameOptions = { find: "", replace: "", regex: false, template: "{name}", start: 1, case: "" }
+        findField.text = ""
+        replaceField.text = ""
+        templateField.text = "{name}"
+        startField.text = "1"
+        renameRows = Rename.preview(targets, renameOptions)
+        renaming = true
+        findField.input.forceActiveFocus()
+    }
+
+    function setRenameOption(key, value) {
+        const next = Object.assign({}, renameOptions)
+        next[key] = value
+        renameOptions = next
+        renameRows = Rename.preview(renameTargets, next)
+    }
+
+    function closeBatchRename() {
+        renaming = false
+        if (pane)
+            pane.focusList()
+    }
+
+    function applyBatchRename() {
+        if (renameErrors || !renameChanges)
+            return
+        Rename.run(renameRows)
+        closeBatchRename()
     }
 
     function openJump() {
@@ -236,7 +274,7 @@ Window {
             { label: "Kopieren", glyph: Util.glyphs.copy, hint: "Strg+C", run: () => copy(p.targets) },
             { label: "Hier hinein einfügen", glyph: Util.glyphs.paste, enabled: has && entry.dir && !several, run: () => Files.paste(entry.path) },
             { label: "Duplizieren", glyph: Util.glyphs.duplicate, hint: "Strg+D", run: () => Files.duplicate(p.targets) },
-            { label: "Umbenennen", glyph: Util.glyphs.rename, hint: "F2", enabled: !several, run: () => openSheet("rename") },
+            { label: several ? "Mehrere umbenennen …" : "Umbenennen", glyph: several ? Util.glyphs.batch : Util.glyphs.rename, hint: "F2", run: () => openSheet("rename") },
             { label: "Pfad kopieren", glyph: Util.glyphs.link, hint: "Strg+Shift+C", run: () => Files.copyPaths(p.targets) },
             { separator: true },
             { label: "In den Papierkorb", glyph: Util.glyphs.trash, hint: "Entf", danger: true, run: () => openSheet("trash") }
@@ -275,6 +313,14 @@ Window {
 
         function onClipboardChanged() {
             win.board = Files.clipboard()
+        }
+    }
+
+    Connections {
+        target: Rename
+
+        function onDone(ok, text, steps) {
+            win.say(text, !ok)
         }
     }
 
@@ -691,6 +737,169 @@ Window {
                 primary: !danger
                 danger: ["delete", "purge", "empty"].includes(win.sheet)
                 onClicked: win.confirmSheet()
+            }
+        }
+    }
+
+    Sheet {
+        id: renameSheet
+
+        open: win.renaming
+        cardWidth: 760
+        onDismissed: win.closeBatchRename()
+        onAccepted: win.applyBatchRename()
+
+        Text {
+            text: win.renameTargets.length + " Elemente umbenennen"
+            color: Theme.fg
+            font.family: Theme.fontUi
+            font.pixelSize: 18
+            font.weight: Font.DemiBold
+        }
+
+        Row {
+            width: parent.width
+            spacing: 8
+
+            Field {
+                id: findField
+                width: (parent.width - regexChip.width - 16) / 2
+                placeholder: "Suchen"
+                onTextChanged: win.setRenameOption("find", text)
+                onKeyPressed: event => { if (event.key === Qt.Key_Escape) { win.closeBatchRename(); event.accepted = true } }
+            }
+
+            Field {
+                id: replaceField
+                width: findField.width
+                placeholder: "Ersetzen durch"
+                onTextChanged: win.setRenameOption("replace", text)
+            }
+
+            Chip {
+                id: regexChip
+                anchors.verticalCenter: parent.verticalCenter
+                label: "Regex"
+                active: win.renameOptions.regex
+                onClicked: win.setRenameOption("regex", !win.renameOptions.regex)
+            }
+        }
+
+        Row {
+            width: parent.width
+            spacing: 8
+
+            Field {
+                id: templateField
+                width: parent.width - startField.width - 8
+                mono: true
+                placeholder: "Vorlage, z. B. {date}-{name}-{n}"
+                text: "{name}"
+                onTextChanged: win.setRenameOption("template", text)
+            }
+
+            Field {
+                id: startField
+                width: 110
+                mono: true
+                placeholder: "Nummer ab"
+                text: "1"
+                input.validator: IntValidator { bottom: 0; top: 99999 }
+                onTextChanged: win.setRenameOption("start", parseInt(text) || 1)
+            }
+        }
+
+        Row {
+            spacing: 6
+
+            SectionLabel { text: "Schreibweise"; anchors.verticalCenter: parent.verticalCenter; rightPadding: 6 }
+            Repeater {
+                model: [{ key: "", label: "unverändert" }, { key: "lower", label: "klein" }, { key: "upper", label: "GROSS" }, { key: "kebab", label: "kebab-case" }]
+                Chip {
+                    required property var modelData
+                    label: modelData.label
+                    active: win.renameOptions.case === modelData.key
+                    onClicked: win.setRenameOption("case", modelData.key)
+                }
+            }
+        }
+
+        Text {
+            width: parent.width
+            text: "{name} Name  ·  {n} Nummer  ·  {date} Aufnahme- oder Änderungsdatum  ·  {ext} Endung"
+            color: Theme.fgMuted
+            font.family: Theme.fontMono
+            font.pixelSize: 10
+            elide: Text.ElideRight
+        }
+
+        Rectangle {
+            width: parent.width
+            height: Math.min(260, previewList.contentHeight + 12)
+            radius: Theme.control
+            color: Qt.alpha(Theme.fg, 0.03)
+            border.width: 1
+            border.color: Qt.alpha(Theme.hairline, 0.6)
+
+            ListView {
+                id: previewList
+                anchors.fill: parent
+                anchors.margins: 6
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                model: win.renameRows
+
+                delegate: Item {
+                    required property var modelData
+                    width: previewList.width
+                    height: 26
+
+                    Text {
+                        id: oldName
+                        x: 8
+                        width: (parent.width - 40) / 2
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: parent.modelData.old
+                        elide: Text.ElideMiddle
+                        color: Theme.fgMuted
+                        font.family: Theme.fontMono
+                        font.pixelSize: 11
+                    }
+
+                    Text {
+                        x: oldName.x + oldName.width + 8
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "→"
+                        color: Qt.alpha(Theme.fgMuted, 0.6)
+                        font.pixelSize: 11
+                    }
+
+                    Text {
+                        x: oldName.x + oldName.width + 28
+                        width: parent.width - x - 8
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: parent.modelData.error ? parent.modelData.new + "  ·  " + parent.modelData.error : parent.modelData.new
+                        elide: Text.ElideMiddle
+                        color: parent.modelData.error ? Theme.danger : parent.modelData.new === parent.modelData.old ? Theme.fgMuted : Theme.fg
+                        font.family: Theme.fontMono
+                        font.pixelSize: 11
+                        font.weight: parent.modelData.new !== parent.modelData.old ? Font.DemiBold : Font.Normal
+                    }
+                }
+            }
+        }
+
+        Row {
+            anchors.right: parent.right
+            spacing: 8
+
+            TextButton { label: "Abbrechen"; onClicked: win.closeBatchRename() }
+            TextButton {
+                label: win.renameErrors ? win.renameErrors + " Konflikt" + (win.renameErrors === 1 ? "" : "e")
+                    : win.renameChanges + " umbenennen"
+                primary: true
+                opacity: win.renameErrors || !win.renameChanges ? 0.45 : 1
+                onClicked: win.applyBatchRename()
             }
         }
     }
