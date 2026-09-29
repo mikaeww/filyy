@@ -14,18 +14,14 @@ Item {
     Row {
         id: brand
 
-        x: root.compact ? (root.width - 30) / 2 : root.padding
+        x: root.compact ? (root.width - 32) / 2 : root.padding
         y: root.padding
         height: 36
         spacing: 10
 
-        Image {
+        Ghost {
             anchors.verticalCenter: parent.verticalCenter
-            width: 30
-            height: 30
-            source: "../assets/filyy.svg"
-            sourceSize: Qt.size(60, 60)
-            smooth: false
+            mood: root.app.busy ? "busy" : "idle"
         }
 
         Text {

@@ -721,6 +721,13 @@ FocusScope {
             visible: root.shown.length === 0
             spacing: 6
 
+            Ghost {
+                anchors.horizontalCenter: parent.horizontalCenter
+                visible: !root.error
+                size: 96
+                mood: filterField.text ? "idle" : "sad"
+            }
+
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: root.error ? "Kein Zugriff" : filterField.text ? "Nichts passt zu „" + filterField.text + "“" : "Dieser Ordner ist leer"

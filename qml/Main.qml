@@ -19,6 +19,8 @@ Window {
     property var pane: null
     property int tabIndex: 0
     property string message: ""
+    // True while a copy or move runs; the ghost looks busy.
+    property bool busy: false
     property bool failed: false
     property var places: Files.places()
     property var board: Files.clipboard()

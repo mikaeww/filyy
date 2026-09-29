@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Draws every pixel graphic Filyy ships: the ghost app icon and the file type icons.
 
-  python3 tools/pixelart.py      writes assets/filyy.svg and assets/icons/*.svg
+  python3 tools/pixelart.py      writes assets/filyy.svg, assets/ghost/*.svg and assets/icons/*.svg
 """
 from pathlib import Path
 
@@ -50,8 +50,8 @@ def paint(grid, cells, ch):
         grid[y][x] = ch
 
 
-def ghost():
-    """32×32 ghost holding a folder."""
+def ghost(eyes="open", look=0, mood="happy", lift=0):
+    """32×32 ghost holding a folder; eyes open/closed/sad, look shifts them sideways, lift raises the folder."""
     size = 32
     g = [["."] * size for _ in range(size)]
 
@@ -69,26 +69,48 @@ def ghost():
         for x in range(20, 26):
             if g[y][x] == "G" and "O" in (g[y][x + 1], g[y][x + 2]):
                 g[y][x] = "g"
-    for x0 in (11, 19):
-        paint(g, [(x, y) for x in range(x0, x0 + 2) for y in range(8, 12)], "O")
-        g[8][x0] = "W"
-    paint(g, [(9, 12), (10, 12), (21, 12), (22, 12)], "K")
-    paint(g, [(15, 13), (16, 13)], "O")
-    paint(g, [(15, 14), (16, 14)], "T")
-    # the folder, its tab on the left, the shaded bottom row
-    paint(g, [(x, y) for x in range(9, 23) for y in range(17, 26)], "Y")
-    paint(g, [(x, 16) for x in range(9, 15)], "O")
-    paint(g, [(x, 17) for x in range(15, 23)] + [(9, 17), (14, 17)], "O")
-    paint(g, [(x, 17) for x in range(10, 14)], "y")
-    paint(g, [(9, y) for y in range(18, 26)] + [(22, y) for y in range(18, 26)], "O")
-    paint(g, [(x, 18) for x in range(10, 22)], "L")
-    paint(g, [(x, 24) for x in range(10, 22)], "y")
-    paint(g, [(x, 25) for x in range(9, 23)], "O")
-    # hands gripping both sides
+    for x0 in (11 + look, 19 + look):
+        if eyes == "closed":
+            paint(g, [(x0, 10), (x0 + 1, 10)], "O")
+        elif eyes == "sad":
+            paint(g, [(x, y) for x in range(x0, x0 + 2) for y in range(9, 12)], "O")
+            g[9][x0] = "W"
+        else:
+            paint(g, [(x, y) for x in range(x0, x0 + 2) for y in range(8, 12)], "O")
+            g[8][x0] = "W"
+    if mood == "sad":
+        paint(g, [(15, 13), (16, 13), (14, 14), (17, 14)], "O")
+        paint(g, [(10, 12), (10, 13)], "B")
+    else:
+        paint(g, [(9, 12), (10, 12), (21, 12), (22, 12)], "K")
+        paint(g, [(15, 13), (16, 13)], "O")
+        paint(g, [(15, 14), (16, 14)], "T")
+    # the folder, its tab on the left, the shaded bottom row; lift moves it and the hands up
+    top = 16 - lift
+    paint(g, [(x, y) for x in range(9, 23) for y in range(top + 1, top + 10)], "Y")
+    paint(g, [(x, top) for x in range(9, 15)], "O")
+    paint(g, [(x, top + 1) for x in range(15, 23)] + [(9, top + 1), (14, top + 1)], "O")
+    paint(g, [(x, top + 1) for x in range(10, 14)], "y")
+    paint(g, [(9, y) for y in range(top + 2, top + 10)] + [(22, y) for y in range(top + 2, top + 10)], "O")
+    paint(g, [(x, top + 2) for x in range(10, 22)], "L")
+    paint(g, [(x, top + 8) for x in range(10, 22)], "y")
+    paint(g, [(x, top + 9) for x in range(9, 23)], "O")
     for x0 in (7, 21):
-        paint(g, [(x0 + 1, 20), (x0 + 2, 20), (x0 + 1, 23), (x0 + 2, 23), (x0, 21), (x0, 22), (x0 + 3, 21), (x0 + 3, 22)], "O")
-        paint(g, [(x0 + 1, 21), (x0 + 2, 21), (x0 + 1, 22), (x0 + 2, 22)], "G")
+        hy = top + 4
+        paint(g, [(x0 + 1, hy), (x0 + 2, hy), (x0 + 1, hy + 3), (x0 + 2, hy + 3), (x0, hy + 1), (x0, hy + 2), (x0 + 3, hy + 1), (x0 + 3, hy + 2)], "O")
+        paint(g, [(x0 + 1, hy + 1), (x0 + 2, hy + 1), (x0 + 1, hy + 2), (x0 + 2, hy + 2)], "G")
     return g
+
+
+GHOSTS = {
+    "idle": ghost(),
+    "blink": ghost(eyes="closed"),
+    "look-left": ghost(look=-1),
+    "look-right": ghost(look=1),
+    "sad": ghost(eyes="sad", mood="sad"),
+    "busy-left": ghost(look=-1, lift=2),
+    "busy-right": ghost(look=1, lift=2),
+}
 
 
 DOC = [
@@ -197,12 +219,15 @@ ICONS = {
 
 def main():
     (ROOT / "assets/filyy.svg").write_text(svg(ghost()))
+    (ROOT / "assets/ghost").mkdir(parents=True, exist_ok=True)
+    for name, grid in GHOSTS.items():
+        (ROOT / f"assets/ghost/{name}.svg").write_text(svg(grid))
     out = ROOT / "assets/icons"
     out.mkdir(parents=True, exist_ok=True)
     for name, grid in ICONS.items():
         assert all(len(row) == 16 for row in grid) and len(grid) == 16, name
         (out / f"{name}.svg").write_text(svg(grid))
-    print(f"wrote filyy.svg and {len(ICONS)} icons")
+    print(f"wrote filyy.svg, {len(GHOSTS)} ghost frames and {len(ICONS)} icons")
 
 
 if __name__ == "__main__":
