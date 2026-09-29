@@ -7,6 +7,9 @@ Window {
     id: win
 
     required property string startPath
+    // True when started without a folder: the tabs from last time come back.
+    property bool restore: false
+    property bool restoring: true
 
     readonly property string home: Files.home()
     readonly property string trashPath: Files.trashPath()
@@ -55,8 +58,8 @@ Window {
     property string sheet: ""
     property var sheetTargets: []
 
-    width: 1180
-    height: 720
+    width: Prefs.get("width", 1180)
+    height: Prefs.get("height", 720)
     minimumWidth: 480
     minimumHeight: 460
     visible: true
@@ -64,8 +67,50 @@ Window {
     title: "Filyy – " + (pane ? pane.title : "")
 
     Component.onCompleted: {
-        tabModel.append({ start: startPath, split: false })
+        const session = restore ? Prefs.get("session", null) : null
+        // Lists from Python arrive as Qt sequences, not real arrays.
+        const saved = session && session.tabs ? Array.from(session.tabs).filter(t => t && Files.exists(t.path)) : []
+        if (saved.length) {
+            for (const t of saved)
+                tabModel.append({ start: t.path, split: !!t.split, second: t.second && Files.exists(t.second) ? t.second : t.path })
+        } else {
+            tabModel.append({ start: startPath, split: false, second: startPath })
+        }
         entrance.start()
+        Qt.callLater(() => {
+            switchTab(Math.min(Math.max(0, session && saved.length ? session.index ?? 0 : 0), tabModel.count - 1))
+            restoring = false
+            saveSession()
+        })
+    }
+
+    onClosing: saveSession()
+    onWidthChanged: sizeSave.restart()
+    onHeightChanged: sizeSave.restart()
+
+    Timer {
+        id: sizeSave
+        interval: 400
+        onTriggered: {
+            Prefs.set("width", win.width)
+            Prefs.set("height", win.height)
+        }
+    }
+
+    // Tabs, split and folders, written whenever any of them changes.
+    function saveSession() {
+        // A window opened on one folder by another app must not replace the tabs you left.
+        if (restoring || !restore)
+            return
+        const tabsNow = []
+        for (let i = 0; i < tabModel.count; i++) {
+            const owner = tabs.itemAt(i)
+            if (!owner || !owner.first.path)
+                continue
+            tabsNow.push({ path: owner.first.path, split: owner.split, second: owner.secondPane ? owner.secondPane.path : owner.first.path })
+        }
+        if (tabsNow.length)
+            Prefs.set("session", { tabs: tabsNow, index: tabIndex })
     }
 
     onActiveChanged: if (active) places = Files.places()
@@ -73,12 +118,12 @@ Window {
     function focusPane(browser) {
         pane = browser
         const owner = tabs.itemAt(tabIndex)
-        if (owner && (owner.first === browser || owner.second === browser))
+        if (owner && (owner.first === browser || owner.secondPane === browser))
             owner.lastPane = browser
     }
 
     function newTab(path) {
-        tabModel.append({ start: path, split: false })
+        tabModel.append({ start: path, split: false, second: path })
         Qt.callLater(() => switchTab(tabModel.count - 1))
     }
 
@@ -86,6 +131,7 @@ Window {
         if (index < 0 || index >= tabModel.count)
             return
         tabIndex = index
+        saveSession()
         const owner = tabs.itemAt(index)
         if (owner && owner.lastPane) {
             pane = owner.lastPane
@@ -98,23 +144,27 @@ Window {
             return win.close()
         tabModel.remove(index)
         switchTab(Math.min(index <= tabIndex ? Math.max(0, tabIndex - 1) : tabIndex, tabModel.count - 1))
+        saveSession()
     }
 
     function toggleSplit() {
         const owner = tabs.itemAt(tabIndex)
         if (!owner)
             return
+        if (!owner.split)
+            tabModel.setProperty(tabIndex, "second", owner.first.path)
         tabModel.setProperty(tabIndex, "split", !owner.split)
         Qt.callLater(() => {
-            focusPane(owner.split ? owner.second : owner.first)
+            focusPane(owner.split ? owner.secondPane : owner.first)
             pane.focusList()
+            saveSession()
         })
     }
 
     function otherPane() {
         const owner = tabs.itemAt(tabIndex)
         if (owner && owner.split) {
-            focusPane(pane === owner.first ? owner.second : owner.first)
+            focusPane(pane === owner.first ? owner.secondPane : owner.first)
             pane.focusList()
         }
     }
@@ -355,7 +405,7 @@ Window {
             const archiveFile = archiveOf(p.path)
             if (!entry)
                 return [{ label: "Alles entpacken", glyph: Util.glyphs.extract, run: () => Files.extractAll(archiveFile) }]
-            const other = split && tab ? (p === tab.first ? tab.second : tab.first) : null
+            const other = split && tab ? (p === tab.first ? tab.secondPane : tab.first) : null
             return [
                 { label: "Öffnen", glyph: Util.glyphs.open, hint: "Enter", enabled: p.targets.length === 1, run: () => p.activate(entry) },
                 { separator: true },
@@ -632,10 +682,11 @@ Window {
 
                         required property int index
                         required property string start
+                        required property string second
                         required property bool split
                         property var lastPane: first
                         readonly property alias first: first
-                        readonly property var second: secondLoader.item
+                        readonly property var secondPane: secondLoader.item
 
                         width: panes.width
                         height: panes.height
@@ -671,7 +722,8 @@ Window {
 
                             sourceComponent: Browser {
                                 app: win
-                                startPath: first.path
+                                startPath: tabItem.second
+                                startView: first.view
                             }
                         }
                     }

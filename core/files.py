@@ -59,6 +59,11 @@ class Files(QObject):
         return listing(path, show_hidden)
 
     @Slot(str, result=bool)
+    def exists(self, path):
+        """A folder or an archive Filyy can open, for restoring tabs from last time."""
+        return os.path.isdir(path) or archive.split(path) is not None
+
+    @Slot(str, result=bool)
     def inArchive(self, path):
         return archive.split(path) is not None
 

@@ -9,6 +9,8 @@ FocusScope {
 
     required property var app
     property string startPath: app.home
+    // The second pane of a restored split starts in its own view; everything else takes the last one used.
+    property string startView: Prefs.get("view", "list")
 
     readonly property bool isActive: app.pane === root
     readonly property real padding: app.compact ? 14 : 20
@@ -17,8 +19,8 @@ FocusScope {
     property var history: ({ list: [], index: -1 })
     property var entries: []
     property string error: ""
-    property bool showHidden: false
-    property string view: "list"
+    property bool showHidden: Prefs.get("hidden", false)
+    property string view: startView === "grid" ? "grid" : "list"
     // Picked entries as {path: true}; `cursor` is the keyboard position, `anchor` the start of a shift range.
     property var picked: ({})
     property int cursor: 0
@@ -50,7 +52,16 @@ FocusScope {
 
     Component.onCompleted: navigate(startPath)
 
-    onViewChanged: view === "usage" ? measure() : Usage.cancel()
+    // The storage map is a tool, not a layout, so only list and grid are remembered.
+    onViewChanged: {
+        if (view === "usage")
+            measure()
+        else {
+            Usage.cancel()
+            Prefs.set("view", view)
+        }
+    }
+    onPathChanged: app.saveSession()
 
     function measure() {
         usageRows = []
@@ -181,6 +192,7 @@ FocusScope {
 
     function toggleHidden() {
         showHidden = !showHidden
+        Prefs.set("hidden", showHidden)
         reload()
     }
 

@@ -20,6 +20,7 @@ from core.jobs import Jobs  # noqa: E402
 from core.apps import AppIcons, Apps  # noqa: E402
 from core.gitinfo import Git  # noqa: E402
 from core.jump import Jump  # noqa: E402
+from core.prefs import Prefs  # noqa: E402
 from core.preview import Preview  # noqa: E402
 from core.rename import Rename  # noqa: E402
 from core.search import Search  # noqa: E402
@@ -51,10 +52,11 @@ def main():
     QGuiApplication.setDesktopFileName("filyy")
     app = QGuiApplication(sys.argv)
     app.setWindowIcon(QIcon(str(HERE / "assets/filyy.svg")))
-    arg = sys.argv[1] if len(sys.argv) > 1 else HOME
+    arg = sys.argv[1] if len(sys.argv) > 1 else ""
     # "Öffnen mit" hands over file:// URLs, a terminal a plain path.
-    start = os.path.abspath(os.path.expanduser(QUrl(arg).toLocalFile() if arg.startswith("file://") else arg))
-    engine = build_engine(start)
+    start = os.path.abspath(os.path.expanduser(QUrl(arg).toLocalFile() if arg.startswith("file://") else arg)) if arg else HOME
+    # Started plain (SUPER+E), Filyy comes back as it was left; asked for a folder, it opens just that.
+    engine = build_engine(start, restore=not arg)
     if not engine.rootObjects():
         sys.exit(1)
     sys.exit(app.exec())
@@ -72,19 +74,19 @@ def backend():
     jobs.finished.connect(lambda _ok, _text, _last, label, steps: undo.push(label, steps))
     rename = Rename()
     rename.done.connect(lambda ok, _text, steps: undo.push("Umbenennen", steps) if ok else None)
-    _backend = [theme, jobs, files, undo, Jump(HOME), rename, Preview(theme), Git(), Apps(), Thumbs(), Search(), Usage()]
+    _backend = [theme, jobs, files, undo, Jump(HOME), rename, Preview(theme), Git(), Apps(), Thumbs(), Search(), Usage(), Prefs()]
     for obj in _backend:
         qmlRegisterSingletonInstance(type(obj), "Filyy", 1, 0, type(obj).__name__, obj)
     return _backend
 
 
-def build_engine(start):
+def build_engine(start, restore=False):
     """Loads the window; the offscreen render check uses this too."""
     backend()
     engine = QQmlApplicationEngine()
     engine.addImageProvider("appicon", AppIcons())
     openable = os.path.isdir(start) or (archive.supported(start) and os.path.isfile(start))
-    engine.setInitialProperties({"startPath": start if openable else HOME})
+    engine.setInitialProperties({"startPath": start if openable else HOME, "restore": restore})
     engine.load(str(HERE / "qml/Main.qml"))
     return engine
 

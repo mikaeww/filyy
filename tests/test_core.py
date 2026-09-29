@@ -13,6 +13,7 @@ from core.apps import all_apps, handlers
 from core.gitinfo import info as git_info
 from core.jump import fuzzy, rank
 from core.rename import apply as apply_rename, kebab, plan
+from core.prefs import Prefs
 from core.search import parse as parse_match
 from core.thumbs import cache_path, fresh, generate
 from core.undo import revert
@@ -66,6 +67,8 @@ def main():
         usage(Path(tmp))
     with tempfile.TemporaryDirectory() as tmp:
         archives(Path(tmp))
+    with tempfile.TemporaryDirectory() as tmp:
+        prefs(Path(tmp))
     print("ok")
 
 
@@ -308,6 +311,18 @@ def archives(root):
     # Into an existing folder: one undo step per new top-level item.
     job = run("extract", [str(pack / "readme.md")], out, root / "bin")
     assert job.log == [("created", str(out / "readme.md"))], job.log
+
+
+def prefs(root):
+    path = str(root / "filyy.ini")
+    first = Prefs(path)
+    assert first.get("view", "list") == "list", "defaults before anything is saved"
+    session = {"index": 1, "tabs": [{"path": "/a", "split": False}, {"path": "/b", "split": True, "second": "/c"}]}
+    first.set("view", "grid")
+    first.set("hidden", True)
+    first.set("session", session)
+    again = Prefs(path)
+    assert again.get("view") == "grid" and again.get("hidden") is True and again.get("session") == session
 
 
 if __name__ == "__main__":
