@@ -33,6 +33,7 @@ FocusScope {
         return needle ? entries.filter(entry => entry.name.toLowerCase().includes(needle)) : entries
     }
     readonly property var current: shown[cursor] ?? null
+    readonly property string filterText: filterField.text
     readonly property var pickedPaths: Object.keys(picked)
     readonly property var targets: pickedPaths.length ? pickedPaths : (current ? [current.path] : [])
     readonly property Flickable activeView: isTrash ? graves : view === "grid" ? grid : list

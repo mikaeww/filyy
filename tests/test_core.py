@@ -12,6 +12,7 @@ from core.apps import all_apps, handlers
 from core.gitinfo import info as git_info
 from core.jump import fuzzy, rank
 from core.rename import apply as apply_rename, kebab, plan
+from core.search import parse as parse_match
 from core.thumbs import cache_path, fresh, generate
 from core.undo import revert
 from core.fs import checked_name, human, listing
@@ -58,6 +59,7 @@ def main():
         apps(Path(tmp))
     with tempfile.TemporaryDirectory() as tmp:
         thumbs(Path(tmp))
+    search()
     print("ok")
 
 
@@ -242,6 +244,16 @@ def thumbs(root):
     os.utime(film, (1, 1))
     assert not fresh(str(film), made), "a changed film invalidates its thumbnail"
     del app
+
+
+def search():
+    import json
+    line = json.dumps({"type": "match", "data": {"path": {"text": "/p/a/notiz.md"}, "lines": {"text": "Grüße an Geist\n"},
+                                                  "line_number": 7, "submatches": [{"start": 11, "end": 16}]}})
+    match = parse_match(line, "/p")
+    assert match["relative"] == "a/notiz.md" and match["line"] == 7
+    assert match["text"][match["start"]:match["end"]] == "Geist", "rg byte offsets become character offsets"
+    assert parse_match(json.dumps({"type": "begin", "data": {}}), "/p") is None
 
 
 if __name__ == "__main__":

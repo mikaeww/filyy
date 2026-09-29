@@ -43,6 +43,10 @@ function ago(seconds) {
     return ""
 }
 
+function escapeHtml(text) {
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+}
+
 function size(bytes) {
     var units = ["B", "KB", "MB", "GB", "TB"]
     var unit = 0

@@ -37,6 +37,14 @@ Window {
     property var openWithApps: []
     property int openWithIndex: 0
     property bool openWithDefault: false
+    property bool searching: false
+    property string searchFolder: ""
+    property int searchId: -1
+    property var searchRows: []
+    property int searchIndex: -1
+    property bool searchRegex: false
+    property bool searchHidden: false
+    property string searchState: ""
     property bool jumping: false
     property var jumpResults: []
     property int jumpIndex: 0
@@ -224,6 +232,52 @@ Window {
             pane.focusList()
     }
 
+    // Starts with whatever the pane's filter holds, so filtering can turn into a content search.
+    function openSearch(query) {
+        searchFolder = pane.path
+        searchRows = []
+        searchIndex = -1
+        searchState = Search.ready() ? "" : "ripgrep (rg) ist nicht installiert"
+        searchField.text = query ?? pane.filterText
+        searching = true
+        searchField.input.forceActiveFocus()
+    }
+
+    function runSearch() {
+        searchRows = []
+        searchIndex = -1
+        searchState = searchField.text.trim() ? "Suche …" : ""
+        searchId = Search.start(searchFolder, searchField.text, searchRegex, searchHidden)
+    }
+
+    function stepSearch(delta) {
+        const matches = searchRows.map((row, i) => row.file ? -1 : i).filter(i => i >= 0)
+        if (!matches.length)
+            return
+        const at = matches.indexOf(searchIndex)
+        searchIndex = matches[(at + delta + matches.length) % matches.length]
+    }
+
+    function takeSearch(open) {
+        const row = searchRows[searchIndex]
+        if (!row || row.file)
+            return
+        closeSearch()
+        if (open) {
+            Files.open(row.path)
+            return
+        }
+        pane.pendingSelect = row.path
+        pane.navigate(row.path.slice(0, row.path.lastIndexOf("/")) || "/")
+    }
+
+    function closeSearch() {
+        Search.cancel()
+        searching = false
+        if (pane)
+            pane.focusList()
+    }
+
     function openJump() {
         jumpField.text = ""
         jumpResults = Jump.search("")
@@ -360,6 +414,31 @@ Window {
     }
 
     Connections {
+        target: Search
+
+        function onFound(id, matches) {
+            if (id !== win.searchId)
+                return
+            const rows = win.searchRows.slice()
+            for (const match of matches) {
+                const last = rows.length ? rows[rows.length - 1] : null
+                if (!last || last.path !== match.path)
+                    rows.push({ file: true, path: match.path, relative: match.relative })
+                rows.push(match)
+            }
+            win.searchRows = rows
+            if (win.searchIndex < 0)
+                win.stepSearch(1)
+        }
+
+        function onFinished(id, total, truncated) {
+            if (id === win.searchId)
+                win.searchState = !total ? (searchField.text.trim() ? "Nichts gefunden" : "")
+                    : total + " Treffer" + (truncated ? ", bei " + total + " abgebrochen" : "")
+        }
+    }
+
+    Connections {
         target: Rename
 
         function onDone(ok, text, steps) {
@@ -380,6 +459,7 @@ Window {
     Shortcut { sequence: "Ctrl+Q"; onActivated: win.close() }
     Shortcut { sequence: "Ctrl+Z"; onActivated: Undo.undo() }
     Shortcut { sequences: ["Ctrl+K", "Ctrl+P"]; onActivated: win.openJump() }
+    Shortcut { sequence: "Ctrl+Shift+F"; onActivated: win.openSearch() }
     Shortcut { sequence: "Ctrl+T"; onActivated: win.newTab(win.pane.path) }
     Shortcut { sequence: "Ctrl+W"; onActivated: win.closeTab(win.tabIndex) }
     Shortcut { sequences: ["Ctrl+Tab", "Ctrl+PgDown"]; onActivated: win.switchTab((win.tabIndex + 1) % tabModel.count) }
@@ -1070,6 +1150,171 @@ Window {
             }
 
             Item { width: parent.width - 330; height: 1 }
+        }
+    }
+
+    Timer {
+        id: searchDelay
+        interval: 250
+        onTriggered: win.runSearch()
+    }
+
+    Sheet {
+        id: searchSheet
+
+        open: win.searching
+        cardWidth: 820
+        cardTop: Math.round(win.height * 0.1)
+        onDismissed: win.closeSearch()
+
+        Row {
+            width: parent.width
+            spacing: 8
+
+            Field {
+                id: searchField
+                width: parent.width - regexToggle.width - hiddenToggle.width - 16
+                height: 42
+                glyph: Util.glyphs.textSearch
+                placeholder: "In Dateien suchen …"
+                input.font.pixelSize: 15
+                onTextChanged: searchDelay.restart()
+                onKeyPressed: event => {
+                    if (event.key === Qt.Key_Down) win.stepSearch(1)
+                    else if (event.key === Qt.Key_Up) win.stepSearch(-1)
+                    else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) win.takeSearch(event.modifiers & Qt.ControlModifier)
+                    else if (event.key === Qt.Key_Escape) win.closeSearch()
+                    else return
+                    event.accepted = true
+                }
+            }
+
+            Chip {
+                id: regexToggle
+                anchors.verticalCenter: parent.verticalCenter
+                label: "Regex"
+                active: win.searchRegex
+                onClicked: { win.searchRegex = !win.searchRegex; win.runSearch() }
+            }
+
+            Chip {
+                id: hiddenToggle
+                anchors.verticalCenter: parent.verticalCenter
+                label: "Versteckte"
+                active: win.searchHidden
+                onClicked: { win.searchHidden = !win.searchHidden; win.runSearch() }
+            }
+        }
+
+        Text {
+            width: parent.width
+            text: "in " + win.searchFolder.replace(win.home, "~") + (win.searchState ? "  ·  " + win.searchState : "")
+            elide: Text.ElideMiddle
+            color: Theme.fgMuted
+            font.family: Theme.fontUi
+            font.pixelSize: 11
+        }
+
+        ListView {
+            id: searchList
+            width: parent.width
+            height: Math.min(Math.round(win.height * 0.6), Math.max(0, contentHeight))
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            model: win.searchRows
+            currentIndex: win.searchIndex
+            onCurrentIndexChanged: if (currentIndex >= 0) positionViewAtIndex(currentIndex, ListView.Contain)
+
+            delegate: Rectangle {
+                id: result
+
+                required property var modelData
+                required property int index
+                readonly property bool current: index === win.searchIndex
+
+                width: searchList.width
+                height: modelData.file ? 34 : 26
+                radius: Theme.control
+                color: current ? Qt.alpha(Theme.accent, 0.13) : !modelData.file && resultPointer.containsMouse ? Qt.alpha(Theme.fg, 0.04) : "transparent"
+
+                FileIcon {
+                    id: resultIcon
+                    visible: result.modelData.file === true
+                    x: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 16
+                    height: 16
+                    kind: "text"
+                }
+
+                Text {
+                    visible: result.modelData.file === true
+                    anchors.left: resultIcon.right
+                    anchors.leftMargin: 10
+                    anchors.right: parent.right
+                    anchors.rightMargin: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: result.modelData.relative
+                    elide: Text.ElideMiddle
+                    color: Theme.fg
+                    font.family: Theme.fontUi
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                }
+
+                Text {
+                    id: lineNumber
+                    visible: !result.modelData.file
+                    x: 34
+                    width: 44
+                    anchors.verticalCenter: parent.verticalCenter
+                    horizontalAlignment: Text.AlignRight
+                    text: result.modelData.line ?? ""
+                    color: Qt.alpha(Theme.fgMuted, 0.8)
+                    font.family: Theme.fontMono
+                    font.pixelSize: 11
+                }
+
+                Text {
+                    visible: !result.modelData.file
+                    anchors.left: lineNumber.right
+                    anchors.leftMargin: 12
+                    anchors.right: parent.right
+                    anchors.rightMargin: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                    textFormat: Text.StyledText
+                    elide: Text.ElideRight
+                    // Only the match is marked up; everything around it is escaped first.
+                    text: result.modelData.file ? "" : (() => {
+                        const t = result.modelData.text.replace(/\t/g, "  ")
+                        const s = result.modelData.start, e = result.modelData.end
+                        return Util.escapeHtml(t.slice(0, s).replace(/^\s+/, "")) + "<b><font color=\"" + Theme.accent + "\">"
+                            + Util.escapeHtml(t.slice(s, e)) + "</font></b>" + Util.escapeHtml(t.slice(e))
+                    })()
+                    color: Theme.fgMuted
+                    font.family: Theme.fontMono
+                    font.pixelSize: 11
+                }
+
+                MouseArea {
+                    id: resultPointer
+                    anchors.fill: parent
+                    enabled: !result.modelData.file
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: mouse => {
+                        win.searchIndex = result.index
+                        win.takeSearch(mouse.modifiers & Qt.ControlModifier)
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: "↑ ↓  Treffer     Enter  Datei zeigen     Strg+Enter  Öffnen"
+            color: Theme.fgMuted
+            font.family: Theme.fontUi
+            font.pixelSize: 11
         }
     }
 
