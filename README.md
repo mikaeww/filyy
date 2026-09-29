@@ -2,8 +2,8 @@
 
 # Filyy
 
-A small, keyboard-friendly file manager for Linux with a pixel-art ghost, made for tiling Wayland
-desktops like Hyprland. Written in Python with Qt Quick (PySide6).
+A keyboard-friendly file manager for Linux, made for tiling Wayland desktops like Hyprland.
+Written in Python with Qt Quick (PySide6).
 
 ![Filyy](assets/screenshot.png)
 
@@ -21,8 +21,7 @@ desktops like Hyprland. Written in Python with Qt Quick (PySide6).
 - Git status for the folder you are in
 - Open with any installed app, video thumbnails, drag and drop
 - Pixel icons and a ghost that reacts to what you do
-
-The interface is in German.
+- English and German, switchable in the settings (gear, bottom left)
 
 ## Install
 
