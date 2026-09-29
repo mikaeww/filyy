@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core import trash as trashcan
 from core.jobs import CHUNK, KEEP_BOTH, REPLACE, SKIP, Job
+from core.apps import all_apps, handlers
 from core.gitinfo import info as git_info
 from core.jump import fuzzy, rank
 from core.rename import apply as apply_rename, kebab, plan
@@ -52,6 +53,8 @@ def main():
         rename(Path(tmp))
     with tempfile.TemporaryDirectory() as tmp:
         git(Path(tmp))
+    with tempfile.TemporaryDirectory() as tmp:
+        apps(Path(tmp))
     print("ok")
 
 
@@ -204,6 +207,21 @@ def git(root):
     got = git_info(str(root / ""))
     assert got["branch"] == "main" and got["subject"] == "Erster Commit" and got["author"] == "Test", got
     assert got["changes"] == 1 and got["time"] > 0
+
+
+def apps(root):
+    user, system = root / "user", root / "system"
+    (system / "kde").mkdir(parents=True)
+    user.mkdir()
+    entry = "[Desktop Entry]\nType=Application\nName={name}\nExec=x %f\nMimeType={mime}\n"
+    (system / "viewer.desktop").write_text(entry.format(name="System Viewer", mime="image/png;"))
+    (user / "viewer.desktop").write_text(entry.format(name="Own Viewer", mime="image/png;"))
+    (system / "kde" / "paint.desktop").write_text(entry.format(name="Paint", mime="image/png;image/jpeg;"))
+    (system / "broken.desktop").write_text("not a desktop file")
+    found = all_apps([str(user), str(system)])
+    assert found["viewer.desktop"]["name"] == "Own Viewer", "the first XDG directory wins"
+    assert "kde-paint.desktop" in found and "broken.desktop" not in found
+    assert [a["name"] for a in handlers(["image/jpeg"], found)] == ["Paint"]
 
 
 if __name__ == "__main__":

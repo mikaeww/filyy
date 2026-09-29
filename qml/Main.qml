@@ -32,6 +32,11 @@ Window {
     property var renameOptions: ({ find: "", replace: "", regex: false, template: "{name}", start: 1, case: "" })
     readonly property int renameErrors: renameRows.filter(row => row.error).length
     readonly property int renameChanges: renameRows.filter(row => row.new !== row.old && !row.error).length
+    property string openWithFile: ""
+    property var openWithHandlers: []
+    property var openWithApps: []
+    property int openWithIndex: 0
+    property bool openWithDefault: false
     property bool jumping: false
     property var jumpResults: []
     property int jumpIndex: 0
@@ -184,6 +189,41 @@ Window {
         closeBatchRename()
     }
 
+    function openWith(path) {
+        openWithFile = path
+        openWithHandlers = Apps.forFile(path)
+        openWithField.text = ""
+        openWithApps = openWithHandlers
+        openWithIndex = 0
+        openWithDefault = false
+        openWithField.input.forceActiveFocus()
+    }
+
+    function filterOpenWith(query) {
+        const needle = query.trim().toLowerCase()
+        if (!needle) {
+            openWithApps = openWithHandlers
+        } else {
+            const own = openWithHandlers.filter(app => app.name.toLowerCase().includes(needle))
+            const ids = own.map(app => app.id)
+            openWithApps = own.concat(Apps.everything().filter(app => !ids.includes(app.id) && app.name.toLowerCase().includes(needle)))
+        }
+        openWithIndex = 0
+    }
+
+    function launchWith(index) {
+        const app = openWithApps[index]
+        if (app)
+            Apps.launch(app.id, app.path, openWithFile, openWithDefault)
+        closeOpenWith()
+    }
+
+    function closeOpenWith() {
+        openWithFile = ""
+        if (pane)
+            pane.focusList()
+    }
+
     function openJump() {
         jumpField.text = ""
         jumpResults = Jump.search("")
@@ -269,6 +309,7 @@ Window {
         return [
             { label: "Öffnen", glyph: Util.glyphs.open, hint: "Enter", enabled: !several, run: () => p.activate(entry) },
             { label: "Vorschau", glyph: Util.glyphs.preview, hint: "Leertaste", enabled: !several, run: () => quickLook.show(p.shown, p.cursor) },
+            { label: "Öffnen mit …", glyph: Util.glyphs.apps, enabled: !several && !entry.dir, run: () => openWith(entry.path) },
             { label: "In neuem Tab", glyph: Util.glyphs.tab, hint: "Mittelklick", enabled: entry.dir && !several, run: () => newTab(entry.path) },
             { label: "Im Terminal öffnen", glyph: Util.glyphs.terminal, enabled: entry.dir && !several, run: () => Files.terminal(entry.path) },
             { separator: true },
@@ -908,6 +949,127 @@ Window {
                 opacity: win.renameErrors || !win.renameChanges ? 0.45 : 1
                 onClicked: win.applyBatchRename()
             }
+        }
+    }
+
+    Sheet {
+        id: openWithSheet
+
+        open: win.openWithFile !== ""
+        cardWidth: 520
+        onDismissed: win.closeOpenWith()
+
+        Text {
+            width: parent.width
+            text: "„" + win.openWithFile.slice(win.openWithFile.lastIndexOf("/") + 1) + "“ öffnen mit"
+            elide: Text.ElideMiddle
+            color: Theme.fg
+            font.family: Theme.fontUi
+            font.pixelSize: 18
+            font.weight: Font.DemiBold
+        }
+
+        Field {
+            id: openWithField
+            width: parent.width
+            glyph: Util.glyphs.search
+            placeholder: "App suchen …"
+            onTextChanged: win.filterOpenWith(text)
+            onKeyPressed: event => {
+                const count = win.openWithApps.length
+                if (event.key === Qt.Key_Down) win.openWithIndex = count ? (win.openWithIndex + 1) % count : 0
+                else if (event.key === Qt.Key_Up) win.openWithIndex = count ? (win.openWithIndex + count - 1) % count : 0
+                else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) win.launchWith(win.openWithIndex)
+                else if (event.key === Qt.Key_Escape) win.closeOpenWith()
+                else return
+                event.accepted = true
+            }
+        }
+
+        ListView {
+            id: appList
+            width: parent.width
+            height: Math.min(8, Math.max(1, count)) * 42
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            model: win.openWithApps
+            currentIndex: win.openWithIndex
+            onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+
+            delegate: Rectangle {
+                id: appRow
+
+                required property var modelData
+                required property int index
+                readonly property bool current: index === win.openWithIndex
+
+                width: appList.width
+                height: 42
+                radius: Theme.control
+                color: current ? Qt.alpha(Theme.accent, 0.13) : appPointer.containsMouse ? Qt.alpha(Theme.fg, 0.04) : "transparent"
+
+                Image {
+                    id: appIcon
+                    x: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 24
+                    height: 24
+                    source: appRow.modelData.icon ? "image://appicon/" + appRow.modelData.icon : ""
+                    sourceSize: Qt.size(48, 48)
+                }
+
+                Text {
+                    anchors.left: appIcon.right
+                    anchors.leftMargin: 12
+                    anchors.right: badge.left
+                    anchors.rightMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: appRow.modelData.name
+                    elide: Text.ElideRight
+                    color: Theme.fg
+                    font.family: Theme.fontUi
+                    font.pixelSize: 13
+                }
+
+                Text {
+                    id: badge
+                    anchors.right: parent.right
+                    anchors.rightMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: appRow.modelData.default ? "Standard" : ""
+                    color: Theme.fgMuted
+                    font.family: Theme.fontMono
+                    font.pixelSize: 10
+                }
+
+                MouseArea {
+                    id: appPointer
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: win.launchWith(appRow.index)
+                }
+            }
+        }
+
+        Text {
+            visible: win.openWithApps.length === 0
+            text: "Keine passende App gefunden"
+            color: Theme.fgMuted
+            font.family: Theme.fontUi
+            font.pixelSize: 12
+        }
+
+        Row {
+            width: parent.width
+
+            Chip {
+                label: "Als Standard für diesen Dateityp merken"
+                active: win.openWithDefault
+                onClicked: win.openWithDefault = !win.openWithDefault
+            }
+
+            Item { width: parent.width - 330; height: 1 }
         }
     }
 

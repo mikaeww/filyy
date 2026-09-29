@@ -17,6 +17,7 @@ sys.path.insert(0, str(HERE))
 from core import trash  # noqa: E402
 from core.files import HOME, Files  # noqa: E402
 from core.jobs import Jobs  # noqa: E402
+from core.apps import AppIcons, Apps  # noqa: E402
 from core.gitinfo import Git  # noqa: E402
 from core.jump import Jump  # noqa: E402
 from core.preview import Preview  # noqa: E402
@@ -68,7 +69,7 @@ def backend():
     jobs.finished.connect(lambda _ok, _text, _last, label, steps: undo.push(label, steps))
     rename = Rename()
     rename.done.connect(lambda ok, _text, steps: undo.push("Umbenennen", steps) if ok else None)
-    _backend = [theme, jobs, files, undo, Jump(HOME), rename, Preview(theme), Git()]
+    _backend = [theme, jobs, files, undo, Jump(HOME), rename, Preview(theme), Git(), Apps()]
     for obj in _backend:
         qmlRegisterSingletonInstance(type(obj), "Filyy", 1, 0, type(obj).__name__, obj)
     return _backend
@@ -78,6 +79,7 @@ def build_engine(start):
     """Loads the window; the offscreen render check uses this too."""
     backend()
     engine = QQmlApplicationEngine()
+    engine.addImageProvider("appicon", AppIcons())
     engine.setInitialProperties({"startPath": start if os.path.isdir(start) else HOME})
     engine.load(str(HERE / "qml/Main.qml"))
     return engine
