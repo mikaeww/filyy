@@ -6,7 +6,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from core.files import transfer
+from core import trash as trashcan
+from core.jobs import CHUNK, KEEP_BOTH, REPLACE, SKIP, Job
 from core.fs import checked_name, human, listing
 from core.theme import preset_colors, shell_theme
 
@@ -21,16 +22,7 @@ def main():
         assert names == ["Zed", "b9.txt", "b10.txt"], names
         assert len(listing(tmp, True)["entries"]) == 4
         assert listing(tmp + "/gone", False)["error"]
-        copy = transfer([tmp + "/b9.txt"], tmp, False)
-        assert copy.endswith("b9 (Kopie).txt"), copy
-        assert transfer([tmp + "/b9.txt"], tmp, False).endswith("b9 (Kopie 2).txt")
-        moved = transfer([tmp + "/b10.txt"], tmp + "/Zed", True)
-        assert moved == tmp + "/Zed/b10.txt" and not os.path.exists(tmp + "/b10.txt")
-        try:
-            transfer([tmp + "/Zed"], tmp + "/Zed", True)
-            raise AssertionError("moved a folder into itself")
-        except ValueError:
-            pass
+        jobs(Path(tmp))
         for bad in ("", "..", "a/b"):
             try:
                 checked_name(bad)
@@ -47,7 +39,84 @@ def main():
         assert theme["colors"]["bg"] == "#000000" and theme["colors"]["fg"] == "#f0e1e6", theme
         assert "nope" not in theme["colors"] and theme["square"] and theme["radius"] == 0
     assert human(512) == "512 B" and human(1536) == "1.5 KB"
+    with tempfile.TemporaryDirectory() as tmp:
+        trash(Path(tmp))
     print("ok")
+
+
+def run(kind, sources, folder, bin_dir, policy=None):
+    job = Job(kind, [str(s) for s in sources], str(folder), lambda p: trashcan.trash(p, str(bin_dir)), policy=policy)
+    job.run()
+    return job
+
+
+def jobs(root):
+    src, dst, bin_dir = root / "src", root / "dst", root / "bin"
+    for d in (src, dst, bin_dir):
+        d.mkdir()
+    (src / "a.txt").write_text("new")
+    (src / "tree").mkdir()
+    (src / "tree" / "inner.txt").write_text("inner")
+    (dst / "a.txt").write_text("old")
+    (dst / "tree").mkdir()
+    (dst / "tree" / "keep.txt").write_text("keep")
+
+    job = run("duplicate", [src / "a.txt"], src, bin_dir)
+    assert job.state == "done" and job.last.endswith("a (Kopie).txt") and job.log == [("created", job.last)]
+    assert run("copy", [src / "a.txt"], dst, bin_dir, policy=SKIP).state == "done"
+    assert (dst / "a.txt").read_text() == "old"
+    kept = run("copy", [src / "a.txt"], dst, bin_dir, policy=KEEP_BOTH)
+    assert kept.last.endswith("a (Kopie).txt") and (dst / "a (Kopie).txt").read_text() == "new"
+    replaced = run("copy", [src / "a.txt"], dst, bin_dir, policy=REPLACE)
+    assert (dst / "a.txt").read_text() == "new", "replace writes the new file"
+    trashed = [entry for entry in replaced.log if entry[0] == "trashed"]
+    assert trashed and Path(trashed[0][2]).read_text() == "old", "the replaced file waits in the trash"
+    # Folders onto folders merge; the moved source folder is gone afterwards.
+    merged = run("move", [src / "tree"], dst, bin_dir, policy=REPLACE)
+    assert merged.state == "done" and not (src / "tree").exists()
+    assert sorted(os.listdir(dst / "tree")) == ["inner.txt", "keep.txt"]
+    assert run("move", [dst], dst / "tree", bin_dir).state == "failed", "a folder cannot move into itself"
+    assert not any(name.endswith(".filyy-part") for _, _, files in os.walk(root) for name in files)
+    # A cancelled copy leaves no part file behind.
+    (src / "big.bin").write_bytes(b"x" * (3 << 20))
+    class StopMidway(Job):
+        def _check(self):
+            if self.done >= CHUNK:
+                self.cancel()
+            super()._check()
+
+    job = StopMidway("copy", [str(src / "big.bin")], str(dst), lambda p: p)
+    job.run()
+    assert job.state == "cancelled" and job.done == CHUNK and not (dst / "big.bin").exists()
+    (src / "many").mkdir()
+    for i in range(3):
+        (src / "many" / f"{i}.bin").write_bytes(b"y" * CHUNK)
+    job = StopMidway("copy", [str(src / "many")], str(dst), lambda p: p)
+    job.run()
+    assert job.state == "cancelled" and not (dst / "many").exists(), "a cancelled folder copy leaves nothing"
+    assert not any(name.endswith(".filyy-part") for name in os.listdir(dst))
+
+
+def trash(root):
+    bin_dir, home = root / "bin", root / "home"
+    home.mkdir()
+    (home / "note.txt").write_text("hi")
+    (home / "dir").mkdir()
+    where = trashcan.trash(str(home / "note.txt"), str(bin_dir))
+    (home / "note.txt").write_text("again")
+    second = trashcan.trash(str(home / "note.txt"), str(bin_dir))
+    assert where != second and os.path.basename(second) == "note.2.txt", second
+    listed = trashcan.entries(str(bin_dir))
+    assert {e["original"] for e in listed} == {str(home / "note.txt")} and len(listed) == 2
+    assert trashcan.restore(where, str(bin_dir)) == str(home / "note.txt")
+    assert (home / "note.txt").read_text() == "hi"
+    try:
+        trashcan.restore(second, str(bin_dir))
+        raise AssertionError("restore overwrote an existing file")
+    except FileExistsError:
+        pass
+    trashcan.purge(second, str(bin_dir))
+    assert trashcan.entries(str(bin_dir)) == []
 
 
 if __name__ == "__main__":

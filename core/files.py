@@ -6,48 +6,13 @@ import threading
 from pathlib import Path
 
 from PySide6.QtCore import (QFileSystemWatcher, QMimeData, QMimeDatabase, QObject, QStorageInfo, QTimer, QUrl,
-                            Signal, Slot, QFile)
+                            Signal, Slot)
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 
+from core import trash as trashcan
 from core.fs import checked_name, human, listing
 
 HOME = str(Path.home())
-
-
-def free_name(folder, name):
-    """name, or 'name (Kopie N).ext' when it is taken in folder."""
-    candidate = os.path.join(folder, name)
-    stem, suffix = (name, "") if os.path.isdir(candidate) else os.path.splitext(name)
-    number = 1
-    while os.path.lexists(candidate):
-        candidate = os.path.join(folder, f"{stem} (Kopie{'' if number == 1 else ' ' + str(number)}){suffix}")
-        number += 1
-    return candidate
-
-
-def transfer(sources, folder, move):
-    """Copies or moves sources into folder; returns the last destination."""
-    last = ""
-    for source in sources:
-        source = os.path.abspath(source)
-        if not os.path.lexists(source):
-            raise FileNotFoundError(f"Nicht gefunden: {os.path.basename(source)}")
-        real = os.path.realpath(source)
-        if os.path.isdir(source) and not os.path.islink(source) and \
-                os.path.commonpath((real, os.path.realpath(folder))) == real:
-            raise ValueError("Ein Ordner kann nicht in sich selbst landen")
-        if move and os.path.dirname(source) == os.path.abspath(folder):
-            continue
-        last = free_name(folder, os.path.basename(source))
-        if move:
-            shutil.move(source, last)
-        elif os.path.islink(source):
-            os.symlink(os.readlink(source), last)
-        elif os.path.isdir(source):
-            shutil.copytree(source, last, symlinks=True)
-        else:
-            shutil.copy2(source, last)
-    return last
 
 
 class Files(QObject):
@@ -56,9 +21,11 @@ class Files(QObject):
     done = Signal(bool, str, str)
     clipboardChanged = Signal()
 
-    def __init__(self, theme):
+    def __init__(self, theme, jobs):
         super().__init__()
         self._theme = theme
+        self._jobs = jobs
+        jobs.finished.connect(lambda ok, text, last, _log: self.done.emit(ok, text, last))
         self._watcher = QFileSystemWatcher(self)
         self._debounce = QTimer(self, singleShot=True, interval=150)
         self._debounce.timeout.connect(lambda: self.folderChanged.emit(self._watched))
@@ -100,6 +67,15 @@ class Files(QObject):
     def space(self, path):
         info = QStorageInfo(path)
         return f"{human(info.bytesAvailable())} frei" if info.isValid() else ""
+
+    @Slot(str, result="QVariantMap")
+    def info(self, path):
+        try:
+            st = os.stat(path)
+        except OSError:
+            return {"name": os.path.basename(path)}
+        return {"name": os.path.basename(path), "size": st.st_size, "mtime": st.st_mtime * 1000,
+                "dir": os.path.isdir(path)}
 
     @Slot(str, result=str)
     def mimeName(self, path):
@@ -147,8 +123,7 @@ class Files(QObject):
     def trash(self, paths):
         def work():
             for path in paths:
-                if not QFile.moveToTrash(path):
-                    raise OSError(f"Konnte {os.path.basename(path)} nicht in den Papierkorb legen")
+                trashcan.trash(path)
         self._run(work, f"{len(paths)} in den Papierkorb gelegt")
 
     @Slot("QVariantList")
@@ -163,16 +138,13 @@ class Files(QObject):
 
     @Slot("QVariantList")
     def duplicate(self, paths):
-        def work():
-            last = ""
-            for path in paths:
-                last = transfer([path], os.path.dirname(path), False)
-            return last
-        self._run(work, "Dupliziert")
+        if paths:
+            self._jobs.start("duplicate", paths, os.path.dirname(paths[0]))
 
     @Slot("QVariantList", str, bool)
     def transfer(self, paths, folder, move):
-        self._run(lambda: transfer(paths, folder, move), "Verschoben" if move else "Kopiert")
+        if paths:
+            self._jobs.start("move" if move else "copy", paths, folder)
 
     @Slot("QVariantList", bool)
     def setClipboard(self, paths, cut):

@@ -14,7 +14,9 @@ from PySide6.QtQml import QQmlApplicationEngine, qmlRegisterSingletonInstance
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
+from core import trash  # noqa: E402
 from core.files import HOME, Files  # noqa: E402
+from core.jobs import Jobs  # noqa: E402
 from core.theme import Theme  # noqa: E402
 
 
@@ -54,7 +56,9 @@ def build_engine(start):
     # Module-level so Python keeps the singletons alive as long as QML uses them.
     global _backend
     theme = Theme()
-    _backend = [theme, Files(theme)]
+    jobs = Jobs(trash.trash)
+    QGuiApplication.instance().aboutToQuit.connect(jobs.shutdown)
+    _backend = [theme, jobs, Files(theme, jobs)]
     for obj in _backend:
         qmlRegisterSingletonInstance(type(obj), "Filyy", 1, 0, type(obj).__name__, obj)
     engine = QQmlApplicationEngine()

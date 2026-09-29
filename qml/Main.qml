@@ -20,7 +20,10 @@ Window {
     property int tabIndex: 0
     property string message: ""
     // True while a copy or move runs; the ghost looks busy.
-    property bool busy: false
+    readonly property bool busy: Jobs.busy
+    // The first job waiting for an answer about an existing file, if any.
+    readonly property var conflict: Jobs.items.find(job => job.state === "conflict") ?? null
+    property bool conflictForAll: false
     property bool failed: false
     property var places: Files.places()
     property var board: Files.clipboard()
@@ -107,22 +110,16 @@ Window {
         sheetTargets = targets
         sheet = kind
         sheetField.text = kind === "rename" ? sheetTargets[0].slice(sheetTargets[0].lastIndexOf("/") + 1) : ""
-        sheetOut.stop()
-        sheetIn.restart()
         if (kind === "mkdir" || kind === "rename") {
             sheetField.input.forceActiveFocus()
             // Select the name without its extension, like every other file manager.
             const dot = sheetField.text.lastIndexOf(".")
             sheetField.input.select(0, kind === "rename" && dot > 0 ? dot : sheetField.text.length)
-        } else {
-            sheetCard.forceActiveFocus()
         }
     }
 
     function closeSheet() {
         sheet = ""
-        sheetIn.stop()
-        sheetOut.restart()
         if (pane)
             pane.focusList()
     }
@@ -140,6 +137,11 @@ Window {
         else
             return
         closeSheet()
+    }
+
+    function answerConflict(answer) {
+        Jobs.resolve(conflict.id, answer, conflictForAll)
+        conflictForAll = false
     }
 
     function cut(paths) {
@@ -564,124 +566,169 @@ Window {
         }
     }
 
-    Item {
-        id: sheetLayer
+    Column {
+        anchors.right: parent.right
+        anchors.rightMargin: 32
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 72
+        spacing: 8
+        z: 4
 
-        property real reveal: 0
+        Repeater {
+            model: Jobs.items
+            JobCard { required property var modelData; job: modelData }
+        }
+    }
 
-        anchors.fill: parent
-        visible: reveal > 0
-        z: 10
+    Sheet {
+        id: nameSheet
 
-        NumberAnimation {
-            id: sheetIn
-            target: sheetLayer
-            property: "reveal"
-            to: 1
-            duration: Theme.enterMs
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: Util.enter
+        readonly property bool asksName: win.sheet === "mkdir" || win.sheet === "rename"
+        readonly property string names: win.sheetTargets.slice(0, 4).map(p => p.slice(p.lastIndexOf("/") + 1)).join(", ")
+            + (win.sheetTargets.length > 4 ? " und " + (win.sheetTargets.length - 4) + " weitere" : "")
+
+        open: win.sheet !== ""
+        onDismissed: win.closeSheet()
+        onAccepted: win.confirmSheet()
+
+        Text {
+            width: parent.width
+            text: ({ mkdir: "Neuer Ordner", rename: "Umbenennen", trash: "In den Papierkorb legen?", delete: "Endgültig löschen?" })[win.sheet] ?? ""
+            color: Theme.fg
+            font.family: Theme.fontUi
+            font.pixelSize: 18
+            font.weight: Font.DemiBold
         }
 
-        NumberAnimation {
-            id: sheetOut
-            target: sheetLayer
-            property: "reveal"
-            to: 0
-            duration: Theme.exitMs
-            easing.type: Easing.OutCubic
+        Text {
+            width: parent.width
+            visible: !nameSheet.asksName
+            text: win.sheet === "delete"
+                ? nameSheet.names + " wird sofort gelöscht, ohne Papierkorb. Das lässt sich nicht rückgängig machen."
+                : nameSheet.names + " landet im Papierkorb und lässt sich von dort zurückholen."
+            wrapMode: Text.Wrap
+            color: Theme.fgMuted
+            font.family: Theme.fontUi
+            font.pixelSize: 12
+            lineHeight: 1.2
         }
 
-        Rectangle {
-            anchors.fill: parent
-            color: Qt.rgba(0, 0, 0, 0.35)
-            opacity: sheetLayer.reveal
+        Field {
+            id: sheetField
+            visible: nameSheet.asksName
+            width: parent.width
+            placeholder: "Name …"
+            onKeyPressed: event => {
+                if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) win.confirmSheet()
+                else if (event.key === Qt.Key_Escape) win.closeSheet()
+                else return
+                event.accepted = true
+            }
         }
 
-        MouseArea {
-            anchors.fill: parent
-            onClicked: win.closeSheet()
+        Row {
+            anchors.right: parent.right
+            spacing: 8
+
+            TextButton { label: "Abbrechen"; onClicked: win.closeSheet() }
+            TextButton {
+                label: ({ mkdir: "Erstellen", rename: "Umbenennen", trash: "In den Papierkorb", delete: "Löschen" })[win.sheet] ?? "OK"
+                primary: win.sheet !== "delete"
+                danger: win.sheet === "delete"
+                onClicked: win.confirmSheet()
+            }
+        }
+    }
+
+    Sheet {
+        id: conflictSheet
+
+        readonly property var source: win.conflict ? Files.info(win.conflict.conflict.source) : ({})
+        readonly property var target: win.conflict ? Files.info(win.conflict.conflict.target) : ({})
+
+        open: win.conflict !== null
+        cardWidth: 480
+        onDismissed: win.answerConflict("skip")
+        onAccepted: win.answerConflict("keep")
+
+        Text {
+            width: parent.width
+            text: "„" + (conflictSheet.target.name ?? "") + "“ gibt es dort schon"
+            wrapMode: Text.Wrap
+            color: Theme.fg
+            font.family: Theme.fontUi
+            font.pixelSize: 18
+            font.weight: Font.DemiBold
         }
 
-        Rectangle {
-            id: sheetCard
+        Repeater {
+            model: [{ label: "Neu", info: conflictSheet.source }, { label: "Vorhanden", info: conflictSheet.target }]
 
-            readonly property bool asksName: win.sheet === "mkdir" || win.sheet === "rename"
-            readonly property string names: win.sheetTargets.slice(0, 4).map(p => p.slice(p.lastIndexOf("/") + 1)).join(", ")
-                + (win.sheetTargets.length > 4 ? " und " + (win.sheetTargets.length - 4) + " weitere" : "")
+            Row {
+                required property var modelData
+                spacing: 12
 
-            width: 440
-            height: sheetColumn.height + 48
-            x: Math.round((parent.width - width) / 2)
-            y: Math.round((parent.height - height) / 2)
-            radius: Theme.radius
-            color: Theme.panelBg
-            border.width: 1
-            border.color: Theme.hairline
-            opacity: sheetLayer.reveal
-            scale: 0.97 + 0.03 * sheetLayer.reveal
-            Keys.onReturnPressed: win.confirmSheet()
-            Keys.onEnterPressed: win.confirmSheet()
-            Keys.onEscapePressed: win.closeSheet()
-
-            MouseArea { anchors.fill: parent }
-
-            Column {
-                id: sheetColumn
-
-                x: 24
-                y: 24
-                width: parent.width - 48
-                spacing: 16
-
+                SectionLabel { width: 90; text: parent.modelData.label; anchors.verticalCenter: parent.verticalCenter }
                 Text {
-                    width: parent.width
-                    text: ({ mkdir: "Neuer Ordner", rename: "Umbenennen", trash: "In den Papierkorb legen?", delete: "Endgültig löschen?" })[win.sheet] ?? ""
-                    color: Theme.fg
-                    font.family: Theme.fontUi
-                    font.pixelSize: 18
-                    font.weight: Font.DemiBold
-                }
-
-                Text {
-                    width: parent.width
-                    visible: !sheetCard.asksName
-                    text: win.sheet === "delete"
-                        ? sheetCard.names + " wird sofort gelöscht, ohne Papierkorb. Das lässt sich nicht rückgängig machen."
-                        : sheetCard.names + " landet im Papierkorb und lässt sich von dort zurückholen."
-                    wrapMode: Text.Wrap
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: (parent.modelData.info.dir ? "Ordner" : Util.size(parent.modelData.info.size ?? 0))
+                        + "  ·  " + Qt.formatDateTime(new Date(parent.modelData.info.mtime ?? 0), "dd.MM.yyyy  HH:mm")
                     color: Theme.fgMuted
-                    font.family: Theme.fontUi
+                    font.family: Theme.fontMono
                     font.pixelSize: 12
-                    lineHeight: 1.2
-                }
-
-                Field {
-                    id: sheetField
-                    visible: sheetCard.asksName
-                    width: parent.width
-                    placeholder: "Name …"
-                    onKeyPressed: event => {
-                        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) win.confirmSheet()
-                        else if (event.key === Qt.Key_Escape) win.closeSheet()
-                        else return
-                        event.accepted = true
-                    }
-                }
-
-                Row {
-                    anchors.right: parent.right
-                    spacing: 8
-
-                    TextButton { label: "Abbrechen"; onClicked: win.closeSheet() }
-                    TextButton {
-                        label: ({ mkdir: "Erstellen", rename: "Umbenennen", trash: "In den Papierkorb", delete: "Löschen" })[win.sheet] ?? "OK"
-                        primary: win.sheet !== "delete"
-                        danger: win.sheet === "delete"
-                        onClicked: win.confirmSheet()
-                    }
                 }
             }
+        }
+
+        Item {
+            width: forAll.width
+            height: forAll.height
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: win.conflictForAll = !win.conflictForAll
+            }
+
+            Row {
+                id: forAll
+                spacing: 10
+
+                Rectangle {
+                    width: 18
+                    height: 18
+                    radius: Theme.square ? 0 : 5
+                    color: win.conflictForAll ? Theme.accent : "transparent"
+                    border.width: win.conflictForAll ? 0 : 1
+                    border.color: Theme.hairline
+
+                    Text {
+                        anchors.centerIn: parent
+                        visible: win.conflictForAll
+                        text: "\u{F012C}"
+                        color: Theme.accentText
+                        font.family: Theme.iconFont
+                        font.pixelSize: 12
+                    }
+                }
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Für alle weiteren Konflikte"
+                    color: Theme.fg
+                    font.family: Theme.fontUi
+                    font.pixelSize: 12
+                }
+            }
+        }
+
+        Row {
+            anchors.right: parent.right
+            spacing: 8
+
+            TextButton { label: "Überspringen"; onClicked: win.answerConflict("skip") }
+            TextButton { label: "Ersetzen"; onClicked: win.answerConflict("replace") }
+            TextButton { label: "Beide behalten"; primary: true; onClicked: win.answerConflict("keep") }
         }
     }
 }
