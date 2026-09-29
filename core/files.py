@@ -10,7 +10,7 @@ from PySide6.QtCore import (QFileSystemWatcher, QMimeData, QMimeDatabase, QObjec
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 
 from core import trash as trashcan
-from core.fs import checked_name, human, listing
+from core.fs import checked_name, human, kind_of, listing
 
 HOME = str(Path.home())
 
@@ -60,10 +60,44 @@ class Files(QObject):
             if volume.isValid() and volume.isReady() and (root == "/" or root.startswith(("/run/media/", "/media/", "/mnt/"))):
                 out.append({"name": "System" if root == "/" else (volume.displayName() or os.path.basename(root)),
                             "path": root, "icon": "drive", "group": "Geräte"})
-        trash = HOME + "/.local/share/Trash/files"
-        if os.path.isdir(trash):
-            out.append({"name": "Papierkorb", "path": trash, "icon": "trash", "group": "Geräte"})
+        out.append({"name": "Papierkorb", "path": self.trashPath(), "icon": "trash", "group": "Geräte"})
         return out
+
+    @Slot(result=str)
+    def trashPath(self):
+        path = os.path.join(trashcan.HOME_TRASH, "files")
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    @Slot(result="QVariantList")
+    def trashEntries(self):
+        out = []
+        for entry in trashcan.entries():
+            try:
+                st = os.lstat(entry["path"])
+            except OSError:
+                continue
+            out.append(dict(entry, size=0 if entry["dir"] else st.st_size, mtime=st.st_mtime * 1000,
+                            kind=kind_of(entry["name"], entry["dir"]), link=False))
+        return out
+
+    @Slot("QVariantList")
+    def restore(self, paths):
+        def work(steps):
+            last = ""
+            for path in paths:
+                last = trashcan.restore(path)
+                # Undoing a restore puts the item back into the trash.
+                steps.append(("created", last))
+            return last
+        self._run(work, f"{len(paths)} wiederhergestellt", "Wiederherstellen")
+
+    @Slot("QVariantList")
+    def purge(self, paths):
+        def work(steps):
+            for path in paths:
+                trashcan.purge(path)
+        self._run(work, f"{len(paths)} endgültig gelöscht")
 
     @Slot(str, result=str)
     def space(self, path):

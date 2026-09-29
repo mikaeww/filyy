@@ -24,6 +24,9 @@ PALETTE = {
     "V": "#b79cff",  # music
     "R": "#ff6b6b",  # pdf band
     "Z": "#d9a46c",  # archive
+    "S": "#8f88a8",  # tombstone
+    "s": "#b8b1cf",  # tombstone light
+    "c": "#4fa66a",  # grass blades
 }
 
 
@@ -111,6 +114,29 @@ GHOSTS = {
     "busy-left": ghost(look=-1, lift=2),
     "busy-right": ghost(look=1, lift=2),
 }
+
+
+def grave():
+    """32×32 tombstone on a strip of grass; Filyy draws the file type icon onto its face."""
+    size = 32
+    g = [["."] * size for _ in range(size)]
+
+    def stone(x, y):
+        if y < 12:
+            return (x - 15.5) ** 2 / 8.4 ** 2 + (y - 12) ** 2 / 8.5 ** 2 <= 1
+        return 8 <= x <= 23 and y <= 26
+
+    for y in range(size):
+        for x in range(size):
+            if stone(x, y):
+                edge = any(not stone(x + dx, y + dy) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+                g[y][x] = "O" if edge else ("s" if x <= 10 else "S")
+    paint(g, [(20, 15), (21, 16), (20, 17), (20, 18)], "O")
+    paint(g, [(x, y) for x in range(4, 28) for y in (26, 27)], "C")
+    paint(g, [(x, 28) for x in range(5, 27)], "O")
+    paint(g, [(4, 26), (27, 26)], ".")
+    paint(g, [(6, 25), (9, 25), (22, 25), (25, 25), (6, 24), (25, 24)], "c")
+    return g
 
 
 DOC = [
@@ -219,6 +245,7 @@ ICONS = {
 
 def main():
     (ROOT / "assets/filyy.svg").write_text(svg(ghost()))
+    (ROOT / "assets/grave.svg").write_text(svg(grave()))
     (ROOT / "assets/ghost").mkdir(parents=True, exist_ok=True)
     for name, grid in GHOSTS.items():
         (ROOT / f"assets/ghost/{name}.svg").write_text(svg(grid))

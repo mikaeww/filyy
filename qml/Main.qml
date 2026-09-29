@@ -9,6 +9,7 @@ Window {
     required property string startPath
 
     readonly property string home: Files.home()
+    readonly property string trashPath: Files.trashPath()
     // Hyprland tiles and groups ignore minimumWidth, so the layout has to fold instead.
     readonly property bool compact: card.width < 980
     readonly property bool shown: card.opacity > 0
@@ -27,7 +28,7 @@ Window {
     property bool failed: false
     property var places: Files.places()
     property var board: Files.clipboard()
-    // "" | "mkdir" | "rename" | "trash" | "delete"
+    // "" | "mkdir" | "rename" | "trash" | "delete" | "purge" | "empty"
     property string sheet: ""
     property var sheetTargets: []
 
@@ -102,7 +103,7 @@ Window {
     }
 
     function openSheet(kind) {
-        const targets = pane ? pane.targets : []
+        const targets = !pane ? [] : kind === "empty" ? pane.entries.map(entry => entry.path) : pane.targets
         if (kind !== "mkdir" && targets.length === 0)
             return
         if (kind === "rename" && targets.length !== 1)
@@ -134,6 +135,8 @@ Window {
             Files.trash(sheetTargets)
         else if (sheet === "delete")
             Files.remove(sheetTargets)
+        else if (sheet === "purge" || sheet === "empty")
+            Files.purge(sheetTargets)
         else
             return
         closeSheet()
@@ -172,6 +175,16 @@ Window {
     function menuFor(entry) {
         const has = board.paths.length > 0
         const p = pane
+        if (p.isTrash) {
+            if (!entry)
+                return [{ label: "Papierkorb leeren", glyph: Util.glyphs.trash, danger: true, enabled: p.entries.length > 0, run: () => openSheet("empty") }]
+            return [
+                { label: "Wiederherstellen", glyph: Util.glyphs.restore, hint: "Enter", run: () => Files.restore(p.targets) },
+                { label: "Herkunft öffnen", glyph: Util.glyphs.open, enabled: p.targets.length === 1 && entry.original !== "", run: () => p.navigate(entry.original.slice(0, entry.original.lastIndexOf("/")) || "/") },
+                { separator: true },
+                { label: "Endgültig löschen", glyph: Util.glyphs.trash, hint: "Entf", danger: true, run: () => openSheet("purge") }
+            ]
+        }
         if (!entry) {
             return [
                 { label: "Neuer Ordner", glyph: Util.glyphs.newFolder, hint: "Strg+Shift+N", run: () => openSheet("mkdir") },
@@ -603,7 +616,8 @@ Window {
 
         Text {
             width: parent.width
-            text: ({ mkdir: "Neuer Ordner", rename: "Umbenennen", trash: "In den Papierkorb legen?", delete: "Endgültig löschen?" })[win.sheet] ?? ""
+            text: ({ mkdir: "Neuer Ordner", rename: "Umbenennen", trash: "In den Papierkorb legen?", delete: "Endgültig löschen?",
+                     purge: "Endgültig löschen?", empty: "Papierkorb leeren?" })[win.sheet] ?? ""
             color: Theme.fg
             font.family: Theme.fontUi
             font.pixelSize: 18
@@ -613,7 +627,9 @@ Window {
         Text {
             width: parent.width
             visible: !nameSheet.asksName
-            text: win.sheet === "delete"
+            text: win.sheet === "empty"
+                ? "Alle " + win.sheetTargets.length + " Elemente im Papierkorb werden gelöscht. Das lässt sich nicht rückgängig machen."
+                : win.sheet === "delete" || win.sheet === "purge"
                 ? nameSheet.names + " wird sofort gelöscht, ohne Papierkorb. Das lässt sich nicht rückgängig machen."
                 : nameSheet.names + " landet im Papierkorb und lässt sich von dort zurückholen."
             wrapMode: Text.Wrap
@@ -642,9 +658,9 @@ Window {
 
             TextButton { label: "Abbrechen"; onClicked: win.closeSheet() }
             TextButton {
-                label: ({ mkdir: "Erstellen", rename: "Umbenennen", trash: "In den Papierkorb", delete: "Löschen" })[win.sheet] ?? "OK"
-                primary: win.sheet !== "delete"
-                danger: win.sheet === "delete"
+                label: ({ mkdir: "Erstellen", rename: "Umbenennen", trash: "In den Papierkorb", delete: "Löschen", purge: "Löschen", empty: "Leeren" })[win.sheet] ?? "OK"
+                primary: !danger
+                danger: ["delete", "purge", "empty"].includes(win.sheet)
                 onClicked: win.confirmSheet()
             }
         }

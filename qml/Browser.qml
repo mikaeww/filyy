@@ -25,6 +25,7 @@ FocusScope {
     property int anchor: 0
     property string pendingSelect: ""
     property bool editingPath: false
+    readonly property bool isTrash: path === app.trashPath
 
     readonly property var shown: {
         const needle = filterField.text.trim().toLowerCase()
@@ -33,8 +34,8 @@ FocusScope {
     readonly property var current: shown[cursor] ?? null
     readonly property var pickedPaths: Object.keys(picked)
     readonly property var targets: pickedPaths.length ? pickedPaths : (current ? [current.path] : [])
-    readonly property Flickable activeView: view === "grid" ? grid : list
-    readonly property string title: path === app.home ? "Home" : path.slice(path.lastIndexOf("/") + 1) || "/"
+    readonly property Flickable activeView: isTrash ? graves : view === "grid" ? grid : list
+    readonly property string title: isTrash ? "Papierkorb" : path === app.home ? "Home" : path.slice(path.lastIndexOf("/") + 1) || "/"
 
     Component.onCompleted: navigate(startPath)
 
@@ -78,8 +79,8 @@ FocusScope {
     }
 
     function reload() {
-        const result = Files.list(path, showHidden)
-        entries = result.entries
+        const result = Files.list(path, showHidden || isTrash)
+        entries = isTrash ? Files.trashEntries() : result.entries
         error = result.error
         const kept = {}
         for (const entry of entries)
@@ -100,7 +101,9 @@ FocusScope {
     function activate(entry) {
         if (!entry)
             return
-        if (entry.dir)
+        if (isTrash)
+            Files.restore(targets)
+        else if (entry.dir)
             navigate(entry.path)
         else
             Files.open(entry.path)
@@ -212,7 +215,9 @@ FocusScope {
         else if (event.key === Qt.Key_PageUp) moveCursor(-10 * columns, shift)
         else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) activate(current)
         else if (event.key === Qt.Key_Backspace) up()
-        else if (event.key === Qt.Key_Delete) app.openSheet(shift ? "delete" : "trash")
+        else if (event.key === Qt.Key_Delete) app.openSheet(isTrash ? "purge" : shift ? "delete" : "trash")
+        else if (isTrash && (event.key === Qt.Key_F2 || event.key === Qt.Key_F10
+                 || (ctrl && [Qt.Key_X, Qt.Key_V, Qt.Key_D, Qt.Key_N].includes(event.key)))) return
         else if (event.key === Qt.Key_F2) app.openSheet("rename")
         else if (event.key === Qt.Key_F10 && !shift || (ctrl && shift && event.key === Qt.Key_N)) app.openSheet("mkdir")
         else if (shift && event.key === Qt.Key_F4) Files.terminal(path)
@@ -352,7 +357,7 @@ FocusScope {
                 spacing: 2
 
                 Repeater {
-                    model: Util.crumbs(root.path, root.app.home)
+                    model: root.isTrash ? [{ name: "Papierkorb", path: root.path }] : Util.crumbs(root.path, root.app.home)
 
                     Row {
                         id: crumb
@@ -469,10 +474,11 @@ FocusScope {
 
             Item { width: 8; height: 1 }
 
-            IconButton { visible: root.width >= 560; glyph: Util.glyphs.list; label: "Liste"; active: root.view === "list"; onClicked: root.view = "list" }
-            IconButton { visible: root.width >= 560; glyph: Util.glyphs.grid; label: "Raster"; active: root.view === "grid"; onClicked: root.view = "grid" }
-            IconButton { visible: root.width >= 560; glyph: root.showHidden ? Util.glyphs.eye : Util.glyphs.eyeOff; label: "Versteckte Dateien"; active: root.showHidden; onClicked: root.toggleHidden() }
-            IconButton { glyph: Util.glyphs.newFolder; label: "Neuer Ordner"; onClicked: root.app.openSheet("mkdir") }
+            IconButton { visible: root.width >= 560 && !root.isTrash; glyph: Util.glyphs.list; label: "Liste"; active: root.view === "list"; onClicked: root.view = "list" }
+            IconButton { visible: root.width >= 560 && !root.isTrash; glyph: Util.glyphs.grid; label: "Raster"; active: root.view === "grid"; onClicked: root.view = "grid" }
+            IconButton { visible: root.width >= 560 && !root.isTrash; glyph: root.showHidden ? Util.glyphs.eye : Util.glyphs.eyeOff; label: "Versteckte Dateien"; active: root.showHidden; onClicked: root.toggleHidden() }
+            IconButton { visible: !root.isTrash; glyph: Util.glyphs.newFolder; label: "Neuer Ordner"; onClicked: root.app.openSheet("mkdir") }
+            TextButton { visible: root.isTrash; label: "Papierkorb leeren"; enabled: root.entries.length > 0; opacity: enabled ? 1 : 0.35; onClicked: root.app.openSheet("empty") }
         }
     }
 
@@ -501,7 +507,7 @@ FocusScope {
         Item {
             id: columnHeads
 
-            visible: root.view === "list"
+            visible: root.view === "list" && !root.isTrash
             width: parent.width - 8
             height: visible ? 24 : 0
 
@@ -517,7 +523,7 @@ FocusScope {
             readonly property int dateWidth: width > 580 ? 150 : 0
             readonly property int sizeWidth: width > 420 ? 96 : 0
 
-            visible: root.view === "list"
+            visible: root.view === "list" && !root.isTrash
             anchors.top: columnHeads.bottom
             anchors.topMargin: 4
             anchors.bottom: parent.bottom
@@ -622,7 +628,7 @@ FocusScope {
         GridView {
             id: grid
 
-            visible: root.view === "grid"
+            visible: root.view === "grid" && !root.isTrash
             anchors.fill: parent
             anchors.rightMargin: 8
             model: visible ? root.shown : []
@@ -716,6 +722,106 @@ FocusScope {
 
         ScrollHint { flick: grid }
 
+        // The trash as a graveyard: a pixel tombstone per item, with where it lived and when it went.
+        GridView {
+            id: graves
+
+            visible: root.isTrash
+            anchors.fill: parent
+            anchors.rightMargin: 8
+            model: visible ? root.shown : []
+            cellWidth: Math.floor(width / Math.max(1, Math.floor(width / 150)))
+            cellHeight: 178
+            boundsBehavior: Flickable.StopAtBounds
+            clip: true
+
+            EmptyArea { parent: graves }
+
+            delegate: Item {
+                id: grave
+
+                required property var modelData
+                required property int index
+                readonly property bool isPicked: root.picked[modelData.path] === true
+
+                width: graves.cellWidth
+                height: graves.cellHeight
+
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: 4
+                    radius: Theme.control
+                    color: grave.isPicked ? Qt.alpha(Theme.accent, 0.13) : graveArea.containsMouse ? Qt.alpha(Theme.fg, 0.04) : "transparent"
+                    border.width: grave.index === root.cursor && root.activeFocus ? 1 : 0
+                    border.color: Qt.alpha(Theme.accent, grave.isPicked ? 0.5 : 0.35)
+                    Behavior on color { ColorAnimation { duration: Theme.quickMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Util.quick } }
+                }
+
+                Image {
+                    id: stone
+                    x: (parent.width - width) / 2
+                    y: 10
+                    width: 64
+                    height: 64
+                    source: "../assets/grave.svg"
+                    sourceSize: Qt.size(64, 64)
+                    smooth: false
+
+                    FileIcon {
+                        x: 16
+                        y: 26
+                        width: 32
+                        height: 32
+                        kind: grave.modelData.kind
+                    }
+                }
+
+                Column {
+                    x: 10
+                    y: stone.y + stone.height + 8
+                    width: parent.width - 20
+                    spacing: 2
+
+                    Text {
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        text: grave.modelData.name
+                        elide: Text.ElideMiddle
+                        color: Theme.fg
+                        font.family: Theme.fontUi
+                        font.pixelSize: 12
+                    }
+
+                    Text {
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        text: grave.modelData.original ? grave.modelData.original.slice(0, grave.modelData.original.lastIndexOf("/")).replace(root.app.home, "~") : ""
+                        elide: Text.ElideMiddle
+                        color: Theme.fgMuted
+                        font.family: Theme.fontUi
+                        font.pixelSize: 11
+                    }
+
+                    Text {
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        text: grave.modelData.deleted ? "† " + Qt.formatDateTime(new Date(grave.modelData.deleted), "dd.MM.yyyy") : ""
+                        color: Qt.alpha(Theme.fgMuted, 0.8)
+                        font.family: Theme.fontMono
+                        font.pixelSize: 10
+                    }
+                }
+
+                EntryArea {
+                    id: graveArea
+                    index: grave.index
+                    entry: grave.modelData
+                }
+            }
+        }
+
+        ScrollHint { flick: graves }
+
         Column {
             anchors.centerIn: parent
             visible: root.shown.length === 0
@@ -725,12 +831,13 @@ FocusScope {
                 anchors.horizontalCenter: parent.horizontalCenter
                 visible: !root.error
                 size: 96
-                mood: filterField.text ? "idle" : "sad"
+                mood: filterField.text || root.isTrash ? "idle" : "sad"
             }
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: root.error ? "Kein Zugriff" : filterField.text ? "Nichts passt zu „" + filterField.text + "“" : "Dieser Ordner ist leer"
+                text: root.error ? "Kein Zugriff" : filterField.text ? "Nichts passt zu „" + filterField.text + "“"
+                    : root.isTrash ? "Der Papierkorb ist leer" : "Dieser Ordner ist leer"
                 color: Theme.fg
                 font.family: Theme.fontUi
                 font.pixelSize: 14
