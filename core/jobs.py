@@ -8,6 +8,7 @@ import shutil
 import stat
 import threading
 import time
+import uuid
 
 from PySide6.QtCore import QObject, QTimer, Property, Signal, Slot
 
@@ -29,6 +30,13 @@ def free_name(folder, name):
         candidate = os.path.join(folder, f"{stem} ({tr('Kopie')}{'' if number == 1 else ' ' + str(number)}){suffix}")
         number += 1
     return candidate
+
+
+def part_path(target):
+    """A hidden, per-copy name next to target, so two jobs writing the same file never share one."""
+    # ponytail: two jobs finishing on the same name still end with the later one's copy; conflicts are asked
+    # when a job starts, not at the final rename.
+    return os.path.join(os.path.dirname(target), f".{os.path.basename(target)}.{uuid.uuid4().hex[:8]}.filyy-part")
 
 
 def tree_size(path):
@@ -220,7 +228,7 @@ class Job:
         for name, src in archive.each_member(source, list(targets)):
             target = targets[name]
             self.current = os.path.basename(target)
-            part = os.path.join(os.path.dirname(target), f".{os.path.basename(target)}.filyy-part")
+            part = part_path(target)
             try:
                 with open(part, "wb") as dst:
                     while chunk := src.read(CHUNK):
@@ -259,7 +267,7 @@ class Job:
                 self._copy(os.path.join(source, name), os.path.join(target, name))
             shutil.copystat(source, target, follow_symlinks=False)
         else:
-            part = os.path.join(os.path.dirname(target), f".{os.path.basename(target)}.filyy-part")
+            part = part_path(target)
             try:
                 with open(source, "rb") as src, open(part, "wb") as dst:
                     while chunk := src.read(CHUNK):
@@ -349,9 +357,9 @@ class Jobs(QObject):
                 label = {"copy": "Kopieren", "move": "Verschieben", "duplicate": "Duplizieren", "extract": "Entpacken"}[job.kind]
                 ok = job.state == "done"
                 count = len(job.sources)
-                items = tr("{n} Element" if count == 1 else "{n} Elemente", n=count)
+                what = tr("{n} Element" if count == 1 else "{n} Elemente", n=count)
                 text = job.error if job.state == "failed" else tr("Abgebrochen") if job.state == "cancelled" else \
-                    tr(done, items=items)
+                    tr(done, items=what)
                 self.finished.emit(ok, text, job.last, label, [list(entry) for entry in job.log])
                 continue
             elapsed = max(0.1, time.monotonic() - job.started)

@@ -27,7 +27,7 @@ Window {
     // True while a copy or move runs; the ghost looks busy.
     readonly property bool busy: Jobs.busy
     // The first job waiting for an answer about an existing file, if any.
-    readonly property var conflict: Jobs.items.find(job => job.state === "conflict") ?? null
+    readonly property var conflict: Array.from(Jobs.items || []).find(job => job.state === "conflict") ?? null
     property bool conflictForAll: false
     property bool renaming: false
     property var renameTargets: []
@@ -605,6 +605,40 @@ Window {
 
     ListModel { id: tabModel }
 
+    // Job cards follow this model, matched by job id: finished jobs leave, running ones update in place instead
+    // of every card being rebuilt ten times a second from Jobs.items.
+    ListModel { id: jobModel }
+
+    function syncJobs() {
+        const items = Array.from(Jobs.items || [])
+        const ids = items.map(job => job.id)
+        for (let i = jobModel.count - 1; i >= 0; i--) {
+            if (!ids.includes(jobModel.get(i).jobId))
+                jobModel.remove(i)
+        }
+        for (const job of items) {
+            const row = { jobId: job.id, kind: job.kind, jobState: job.state, count: job.count, folder: job.folder,
+                          current: job.current, done: job.done, total: job.total, rate: job.rate }
+            let at = -1
+            for (let i = 0; i < jobModel.count; i++) {
+                if (jobModel.get(i).jobId === job.id)
+                    at = i
+            }
+            if (at < 0)
+                jobModel.append(row)
+            else
+                jobModel.set(at, row)
+        }
+    }
+
+    Connections {
+        target: Jobs
+
+        function onChanged() {
+            win.syncJobs()
+        }
+    }
+
     Item {
         id: card
 
@@ -1001,8 +1035,8 @@ Window {
         z: 4
 
         Repeater {
-            model: Jobs.items
-            JobCard { required property var modelData; job: modelData }
+            model: jobModel
+            JobCard {}
         }
     }
 

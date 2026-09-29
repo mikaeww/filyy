@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core import trash as trashcan
-from core.jobs import CHUNK, KEEP_BOTH, REPLACE, SKIP, Job
+from core.jobs import CHUNK, KEEP_BOTH, REPLACE, SKIP, Job, Jobs
 from core import archive, i18n
 from core.apps import all_apps, handlers
 from core.gitinfo import info as git_info
@@ -72,6 +72,8 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         prefs(Path(tmp))
     translations()
+    with tempfile.TemporaryDirectory() as tmp:
+        job_list(Path(tmp))
     print("ok")
 
 
@@ -378,6 +380,25 @@ def translations():
     assert i18n.tr("Nicht gefunden: {name}", name="a.txt") == "Not found: a.txt"
     i18n.current = "de"
     assert i18n.tr("{n} Ordner", n=1) == "1 Ordner"
+
+
+def job_list(root):
+    """The list QML shows must empty out once jobs finish (it once turned into the text "1 item")."""
+    from PySide6.QtCore import QCoreApplication
+    app = QCoreApplication.instance() or QCoreApplication([])
+    (root / "a.txt").write_text("a")
+    (root / "out").mkdir()
+    jobs = Jobs(lambda p: p)
+    finished = []
+    jobs.finished.connect(lambda ok, text, *_: finished.append((ok, text)))
+    for _ in range(3):
+        jobs.start("copy", [str(root / "a.txt")], str(root / "out"))
+    for job in list(jobs._jobs.values()):
+        job.thread.join(timeout=5)
+    jobs._refresh()
+    assert jobs.property("items") == [] and jobs.property("busy") is False, jobs.property("items")
+    assert len(finished) == 3 and all(ok for ok, _ in finished), finished
+    del app
 
 
 if __name__ == "__main__":

@@ -31,6 +31,8 @@ function visit(state, path) {
 
 // Translated text for a German key; {name} placeholders come from values, "one|many" picks by values.n.
 function tr(strings, text, values) {
+    if (text === undefined || text === null)
+        return ""
     var out = strings && strings[text] !== undefined ? strings[text] : text
     if (values && out.indexOf("|") >= 0 && values.n !== undefined)
         out = out.split("|")[values.n === 1 ? 0 : 1]

@@ -6,9 +6,18 @@ import "Util.js" as Util
 Rectangle {
     id: root
 
-    required property var job
-    readonly property real fraction: job.total > 0 ? Math.min(1, job.done / job.total) : 0
-    readonly property bool paused: job.state === "paused"
+    // One row of the job model in Main.qml.
+    required property int jobId
+    required property string kind
+    required property string jobState
+    required property int count
+    required property string folder
+    required property string current
+    required property real done
+    required property real total
+    required property real rate
+    readonly property real fraction: total > 0 ? Math.min(1, done / total) : 0
+    readonly property bool paused: jobState === "paused"
     property real reveal: 0
 
     width: 340
@@ -35,9 +44,9 @@ Rectangle {
             width: parent.width
             text: {
                 const what = Util.tr(I18n.strings, ({ copy: "Kopiere {items} nach {folder}", move: "Verschiebe {items} nach {folder}",
-                                                     duplicate: "Dupliziere {items}", extract: "Entpacke {items} nach {folder}" })[root.job.kind], {
-                    items: Util.tr(I18n.strings, root.job.count === 1 ? "{n} Element" : "{n} Elemente", { n: root.job.count }),
-                    folder: root.job.folder.slice(root.job.folder.lastIndexOf("/") + 1)
+                                                     duplicate: "Dupliziere {items}", extract: "Entpacke {items} nach {folder}" })[root.kind], {
+                    items: Util.tr(I18n.strings, root.count === 1 ? "{n} Element" : "{n} Elemente", { n: root.count }),
+                    folder: root.folder.slice(root.folder.lastIndexOf("/") + 1)
                 })
                 return root.paused ? Util.tr(I18n.strings, "Pausiert: {what}", { what: what }) : what
             }
@@ -51,7 +60,7 @@ Rectangle {
         Text {
             width: parent.width
             visible: text !== ""
-            text: root.job.current
+            text: root.current
             elide: Text.ElideMiddle
             color: Theme.fgMuted
             font.family: Theme.fontUi
@@ -74,8 +83,8 @@ Rectangle {
         }
 
         Text {
-            text: Util.tr(I18n.strings, "{done} von {total}", { done: Util.size(root.job.done), total: Util.size(root.job.total) })
-                + (root.paused || root.job.rate < 1 ? "" : "  ·  " + Util.size(root.job.rate) + "/s")
+            text: Util.tr(I18n.strings, "{done} von {total}", { done: Util.size(root.done), total: Util.size(root.total) })
+                + (root.paused || root.rate < 1 ? "" : "  ·  " + Util.size(root.rate) + "/s")
             color: Theme.fgMuted
             font.family: Theme.fontMono
             font.pixelSize: 11
@@ -93,13 +102,13 @@ Rectangle {
         IconButton {
             glyph: root.paused ? Util.glyphs.play : Util.glyphs.pause
             label: root.paused ? Util.tr(I18n.strings, "Fortsetzen") : Util.tr(I18n.strings, "Pausieren")
-            onClicked: Jobs.pause(root.job.id, !root.paused)
+            onClicked: Jobs.pause(root.jobId, !root.paused)
         }
 
         IconButton {
             glyph: Util.glyphs.cancel
             label: Util.tr(I18n.strings, "Abbrechen")
-            onClicked: Jobs.cancel(root.job.id)
+            onClicked: Jobs.cancel(root.jobId)
         }
     }
 }
