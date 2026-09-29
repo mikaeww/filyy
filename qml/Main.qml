@@ -327,6 +327,11 @@ Window {
             .map(url => decodeURIComponent(url.slice(7)))
         if (paths.length === 0)
             return
+        if (Files.inArchive(paths[0])) {
+            Files.extract(paths, folder)
+            drop.accept(Qt.CopyAction)
+            return
+        }
         // ponytail: drags from inside Filyy move, drags from other apps copy; Dolphin asks instead.
         const move = drop.source !== null
         Files.transfer(paths, folder, move)
@@ -346,6 +351,18 @@ Window {
                 { label: "Endgültig löschen", glyph: Util.glyphs.trash, hint: "Entf", danger: true, run: () => openSheet("purge") }
             ]
         }
+        if (p.inArchive) {
+            const archiveFile = archiveOf(p.path)
+            if (!entry)
+                return [{ label: "Alles entpacken", glyph: Util.glyphs.extract, run: () => Files.extractAll(archiveFile) }]
+            const other = split && tab ? (p === tab.first ? tab.second : tab.first) : null
+            return [
+                { label: "Öffnen", glyph: Util.glyphs.open, hint: "Enter", enabled: p.targets.length === 1, run: () => p.activate(entry) },
+                { separator: true },
+                { label: "Neben das Archiv entpacken", glyph: Util.glyphs.extract, run: () => Files.extract(p.targets, Files.archiveFolder(p.path)) },
+                { label: "In andere Seite entpacken", glyph: Util.glyphs.split, enabled: other !== null && !other.readOnly, run: () => Files.extract(p.targets, other.path) }
+            ]
+        }
         if (!entry) {
             return [
                 { label: "Neuer Ordner", glyph: Util.glyphs.newFolder, hint: "Strg+Shift+N", run: () => openSheet("mkdir") },
@@ -360,8 +377,10 @@ Window {
             ]
         }
         const several = p.targets.length > 1
+        const packed = !entry.dir && Files.isArchive(entry.path)
         return [
-            { label: "Öffnen", glyph: Util.glyphs.open, hint: "Enter", enabled: !several, run: () => p.activate(entry) },
+            { label: packed ? "Durchsuchen" : "Öffnen", glyph: Util.glyphs.open, hint: "Enter", enabled: !several, run: () => p.activate(entry) },
+            { label: "Hier entpacken", glyph: Util.glyphs.extract, visible: packed, enabled: !several, run: () => Files.extractAll(entry.path) },
             { label: "Vorschau", glyph: Util.glyphs.preview, hint: "Leertaste", enabled: !several, run: () => quickLook.show(p.shown, p.cursor) },
             { label: "Öffnen mit …", glyph: Util.glyphs.apps, enabled: !several && !entry.dir, run: () => openWith(entry.path) },
             { label: "In neuem Tab", glyph: Util.glyphs.tab, hint: "Mittelklick", enabled: entry.dir && !several, run: () => newTab(entry.path) },
@@ -378,8 +397,14 @@ Window {
         ]
     }
 
+    // The archive file a virtual path like pack.zip/dir points into.
+    function archiveOf(path) {
+        const folder = Files.archiveFolder(path)
+        return folder + "/" + path.slice(folder.length + 1).split("/")[0]
+    }
+
     function showMenu(entry, x, y) {
-        menu.items = menuFor(entry)
+        menu.items = menuFor(entry).filter(item => item.visible !== false)
         menu.x = Math.min(x, win.width - menu.width - 8)
         menu.y = Math.min(y, win.height - menu.implicitHeight - 8)
         menuOut.stop()
@@ -674,7 +699,7 @@ Window {
 
         visible: false
         z: 6
-        width: 250
+        width: 270
         implicitHeight: menuColumn.height + 12
         height: implicitHeight
         radius: Theme.control + 4

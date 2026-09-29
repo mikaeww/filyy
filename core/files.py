@@ -9,8 +9,12 @@ from PySide6.QtCore import (QFileSystemWatcher, QMimeData, QMimeDatabase, QObjec
                             Signal, Slot)
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 
+import hashlib
+
+from core import archive
 from core import trash as trashcan
-from core.fs import checked_name, human, kind_of, listing
+from core.fs import checked_name, human, kind_of, listing, natural_key
+from core.jobs import free_name
 
 HOME = str(Path.home())
 
@@ -21,6 +25,8 @@ class Files(QObject):
     done = Signal(bool, str, str)
     # undo label, steps (see core/undo.py)
     recorded = Signal(str, "QVariantList")
+    # Worker threads hand files to open to the GUI thread through this.
+    extracted = Signal(str)
     clipboardChanged = Signal()
 
     def __init__(self, theme, jobs):
@@ -35,14 +41,62 @@ class Files(QObject):
         self._watched = ""
         self._mime = QMimeDatabase()
         QGuiApplication.clipboard().dataChanged.connect(self.clipboardChanged)
+        self.extracted.connect(self.open)
 
     @Slot(str, bool, result="QVariantMap")
     def list(self, path, show_hidden):
+        inside = archive.split(path)
         if self._watched:
             self._watcher.removePath(self._watched)
-        self._watched = path
-        self._watcher.addPath(path)
+        # Inside an archive the archive's own folder is watched, so a rewritten archive refreshes too.
+        self._watched = os.path.dirname(inside[0]) if inside else path
+        self._watcher.addPath(self._watched)
+        if inside:
+            try:
+                return archive.listing(inside[0], inside[1], kind_of, natural_key)
+            except (OSError, ValueError, archive.zipfile.BadZipFile, archive.tarfile.TarError) as error:
+                return {"path": path, "entries": [], "error": f"Archiv nicht lesbar: {error}"}
         return listing(path, show_hidden)
+
+    @Slot(str, result=bool)
+    def inArchive(self, path):
+        return archive.split(path) is not None
+
+    @Slot(str, result=bool)
+    def isArchive(self, path):
+        return archive.supported(path) and os.path.isfile(path)
+
+    @Slot(str, result=str)
+    def archiveFolder(self, path):
+        inside = archive.split(path)
+        return os.path.dirname(inside[0]) if inside else os.path.dirname(path)
+
+    @Slot("QVariantList", str)
+    def extract(self, paths, folder):
+        if paths:
+            self._jobs.start("extract", paths, folder)
+
+    @Slot(str)
+    def extractAll(self, path):
+        """Unpacks the whole archive into a new folder next to it, named like the archive."""
+        base = os.path.basename(path)
+        stem = next((base[:-len(s)] for s in archive.ZIP + archive.TAR if base.lower().endswith(s)), base)
+        self._jobs.start("extract", [path], free_name(os.path.dirname(path), stem))
+
+    @Slot(str)
+    def openArchived(self, path):
+        """Extracts one member into ~/.cache/filyy/open and opens it with its default app."""
+        def work(steps):
+            source, inner = archive.split(path)
+            folder = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "filyy", "open",
+                                  hashlib.md5(path.encode()).hexdigest())
+            os.makedirs(folder, exist_ok=True)
+            target = os.path.join(folder, os.path.basename(inner))
+            for _, handle in archive.each_member(source, [inner]):
+                with open(target, "wb") as out:
+                    shutil.copyfileobj(handle, out)
+            self.extracted.emit(target)
+        self._run(work, "Aus dem Archiv geöffnet")
 
     @Slot(result=str)
     def home(self):

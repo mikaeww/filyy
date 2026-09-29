@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core import trash as trashcan
 from core.jobs import CHUNK, KEEP_BOTH, REPLACE, SKIP, Job
+from core import archive
 from core.apps import all_apps, handlers
 from core.gitinfo import info as git_info
 from core.jump import fuzzy, rank
@@ -16,7 +17,7 @@ from core.search import parse as parse_match
 from core.thumbs import cache_path, fresh, generate
 from core.undo import revert
 from core.usage import disk_usage
-from core.fs import checked_name, human, listing
+from core.fs import checked_name, human, kind_of, listing, natural_key
 from core.theme import preset_colors, shell_theme
 
 
@@ -63,6 +64,8 @@ def main():
     search()
     with tempfile.TemporaryDirectory() as tmp:
         usage(Path(tmp))
+    with tempfile.TemporaryDirectory() as tmp:
+        archives(Path(tmp))
     print("ok")
 
 
@@ -269,6 +272,42 @@ def usage(root):
     size = disk_usage(str(root / "big"), device, lambda: True)
     assert 384 * 1024 <= size < 512 * 1024, size
     assert disk_usage(str(root / "link"), device, lambda: True) < 4096, "symlinks are not followed"
+
+
+def archives(root):
+    import tarfile
+    import zipfile
+    pack = root / "pack.zip"
+    with zipfile.ZipFile(pack, "w") as z:
+        z.writestr("assets/logo.txt", "logo")
+        z.writestr("assets/deep/x.txt", "x")
+        z.writestr("readme.md", "hi")
+        z.writestr("../evil.txt", "no")
+        z.writestr("/abs.txt", "no")
+    tgz = root / "src.tar.gz"
+    with tarfile.open(tgz, "w:gz") as t:
+        for name, text in (("src/a.py", "a"), ("src/b.py", "b")):
+            data = text.encode()
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            import io
+            t.addfile(info, io.BytesIO(data))
+    assert archive.split(str(pack / "assets" / "logo.txt")) == (str(pack), "assets/logo.txt")
+    assert archive.split(str(root)) is None
+    top = archive.listing(str(pack), "", kind_of, natural_key)["entries"]
+    assert [e["name"] for e in top] == ["assets", "readme.md"], "unsafe names never show up"
+    inner = archive.listing(str(pack), "assets", kind_of, natural_key)["entries"]
+    assert [e["name"] for e in inner] == ["deep", "logo.txt"]
+    out = root / "out"
+    job = run("extract", [str(pack / "assets")], out, root / "bin")
+    assert job.state == "done", job.error
+    assert (out / "assets" / "deep" / "x.txt").read_text() == "x" and not (root / "evil.txt").exists()
+    assert job.log == [("created", str(out))], job.log
+    job = run("extract", [str(tgz)], root / "src-out", root / "bin")
+    assert job.state == "done" and (root / "src-out" / "src" / "b.py").read_text() == "b", job.error
+    # Into an existing folder: one undo step per new top-level item.
+    job = run("extract", [str(pack / "readme.md")], out, root / "bin")
+    assert job.log == [("created", str(out / "readme.md"))], job.log
 
 
 if __name__ == "__main__":

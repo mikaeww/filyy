@@ -14,7 +14,7 @@ from PySide6.QtQml import QQmlApplicationEngine, qmlRegisterSingletonInstance
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from core import trash  # noqa: E402
+from core import archive, trash  # noqa: E402
 from core.files import HOME, Files  # noqa: E402
 from core.jobs import Jobs  # noqa: E402
 from core.apps import AppIcons, Apps  # noqa: E402
@@ -83,7 +83,8 @@ def build_engine(start):
     backend()
     engine = QQmlApplicationEngine()
     engine.addImageProvider("appicon", AppIcons())
-    engine.setInitialProperties({"startPath": start if os.path.isdir(start) else HOME})
+    openable = os.path.isdir(start) or (archive.supported(start) and os.path.isfile(start))
+    engine.setInitialProperties({"startPath": start if openable else HOME})
     engine.load(str(HERE / "qml/Main.qml"))
     return engine
 

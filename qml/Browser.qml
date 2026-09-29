@@ -32,6 +32,9 @@ FocusScope {
     property bool usageDone: false
     property int usageRun: -1
     readonly property bool isTrash: path === app.trashPath
+    readonly property bool inArchive: path !== "" && Files.inArchive(path)
+    // Trash and archives only allow what makes sense there; nothing inside an archive can change.
+    readonly property bool readOnly: isTrash || inArchive
 
     readonly property var shown: {
         const needle = filterField.text.trim().toLowerCase()
@@ -127,7 +130,9 @@ FocusScope {
             return
         if (isTrash)
             Files.restore(targets)
-        else if (entry.dir)
+        else if (inArchive && !entry.dir)
+            Files.openArchived(entry.path)
+        else if (entry.dir || Files.isArchive(entry.path))
             navigate(entry.path)
         else
             Files.open(entry.path)
@@ -261,10 +266,10 @@ FocusScope {
         else if (event.key === Qt.Key_PageDown) moveCursor(10 * columns, shift)
         else if (event.key === Qt.Key_PageUp) moveCursor(-10 * columns, shift)
         else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) activate(current)
-        else if (event.key === Qt.Key_Space && current) app.quickLook.show(shown, cursor)
+        else if (event.key === Qt.Key_Space && current && !inArchive) app.quickLook.show(shown, cursor)
         else if (event.key === Qt.Key_Backspace) up()
-        else if (event.key === Qt.Key_Delete) app.openSheet(isTrash ? "purge" : shift ? "delete" : "trash")
-        else if (isTrash && (event.key === Qt.Key_F2 || event.key === Qt.Key_F10
+        else if (event.key === Qt.Key_Delete && !inArchive) app.openSheet(isTrash ? "purge" : shift ? "delete" : "trash")
+        else if (readOnly && (event.key === Qt.Key_Delete || event.key === Qt.Key_F2 || event.key === Qt.Key_F10
                  || (ctrl && [Qt.Key_X, Qt.Key_V, Qt.Key_D, Qt.Key_N].includes(event.key)))) return
         else if (event.key === Qt.Key_F2) app.openSheet("rename")
         else if (event.key === Qt.Key_F10 && !shift || (ctrl && shift && event.key === Qt.Key_N)) app.openSheet("mkdir")
@@ -526,7 +531,8 @@ FocusScope {
             IconButton { visible: root.width >= 560 && !root.isTrash; glyph: Util.glyphs.grid; label: "Raster"; active: root.view === "grid"; onClicked: root.view = "grid" }
             IconButton { visible: root.width >= 560 && !root.isTrash; glyph: Util.glyphs.usage; label: "Speicher-Karte"; active: root.view === "usage"; onClicked: root.view = root.view === "usage" ? "list" : "usage" }
             IconButton { visible: root.width >= 560 && !root.isTrash; glyph: root.showHidden ? Util.glyphs.eye : Util.glyphs.eyeOff; label: "Versteckte Dateien"; active: root.showHidden; onClicked: root.toggleHidden() }
-            IconButton { visible: !root.isTrash; glyph: Util.glyphs.newFolder; label: "Neuer Ordner"; onClicked: root.app.openSheet("mkdir") }
+            IconButton { visible: !root.readOnly; glyph: Util.glyphs.newFolder; label: "Neuer Ordner"; onClicked: root.app.openSheet("mkdir") }
+            TextButton { visible: root.inArchive; label: "Alles entpacken"; onClicked: Files.extractAll(root.app.archiveOf(root.path)) }
             TextButton { visible: root.isTrash; label: "Papierkorb leeren"; enabled: root.entries.length > 0; opacity: enabled ? 1 : 0.35; onClicked: root.app.openSheet("empty") }
         }
     }
@@ -653,7 +659,7 @@ FocusScope {
                     visible: list.dateWidth > 0
                     x: parent.width - list.dateWidth
                     anchors.verticalCenter: parent.verticalCenter
-                    text: Qt.formatDateTime(new Date(row.modelData.mtime), "dd.MM.yyyy  HH:mm")
+                    text: row.modelData.mtime ? Qt.formatDateTime(new Date(row.modelData.mtime), "dd.MM.yyyy  HH:mm") : ""
                     color: Theme.fgMuted
                     font.family: Theme.fontMono
                     font.pixelSize: 11

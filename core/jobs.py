@@ -11,6 +11,8 @@ import time
 
 from PySide6.QtCore import QObject, QTimer, Property, Signal, Slot
 
+from core import archive
+
 CHUNK = 1 << 20
 
 # Conflict answers
@@ -106,6 +108,10 @@ class Job:
 
     def run(self):
         try:
+            if self.kind == "extract":
+                self._extract()
+                self.state = "done"
+                return
             self.total = sum(tree_size(s) for s in self.sources)
             for source in self.sources:
                 self._check()
@@ -175,6 +181,62 @@ class Job:
             shutil.rmtree(source)
         else:
             os.remove(source)
+
+    def _extract(self):
+        """Unpacks archive members (virtual paths like pack.zip/dir) into folder, asking on conflicts."""
+        source, picked = archive.plan(self.sources)
+        self.total = sum(info["size"] for _, _, info in picked if not info["dir"])
+        new_folder = not os.path.isdir(self.folder)
+        if new_folder:
+            os.makedirs(self.folder)
+            self.log.append(("created", self.folder))
+            self.last = self.folder
+            fresh_tops = set()
+        else:
+            # Undo removes each new top-level item once; files landing in folders that already existed are logged
+            # one by one.
+            tops = {relative.split("/")[0] for _, relative, _ in picked}
+            fresh_tops = {top for top in tops if not os.path.lexists(os.path.join(self.folder, top))}
+            self.log += [("created", os.path.join(self.folder, top)) for top in sorted(fresh_tops)]
+        targets = {}
+        for name, relative, info in picked:
+            self._check()
+            target = os.path.join(self.folder, relative)
+            if info["dir"]:
+                os.makedirs(target, exist_ok=True)
+                continue
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            if os.path.lexists(target):
+                answer = self._resolve(f"{source}/{name}", target)
+                if answer == SKIP:
+                    self.done += info["size"]
+                    continue
+                if answer == KEEP_BOTH:
+                    target = free_name(os.path.dirname(target), os.path.basename(target))
+                else:
+                    self.log.append(("trashed", target, self.trash(target)))
+            targets[name] = target
+        for name, src in archive.each_member(source, list(targets)):
+            target = targets[name]
+            self.current = os.path.basename(target)
+            part = os.path.join(os.path.dirname(target), f".{os.path.basename(target)}.filyy-part")
+            try:
+                with open(part, "wb") as dst:
+                    while chunk := src.read(CHUNK):
+                        self._check()
+                        dst.write(chunk)
+                        self.done += len(chunk)
+                os.replace(part, target)
+            except BaseException:
+                try:
+                    os.remove(part)
+                except OSError:
+                    pass
+                raise
+            top = os.path.relpath(target, self.folder).split("/")[0]
+            if not new_folder and top not in fresh_tops:
+                self.log.append(("created", target))
+            self.last = self.last or target
 
     def _fresh_copy(self, source, target):
         """Copies to a target this job creates; on cancel or error the half-built target goes away again."""
@@ -280,8 +342,8 @@ class Jobs(QObject):
         for job_id, job in list(self._jobs.items()):
             if job.state in ("done", "failed", "cancelled"):
                 del self._jobs[job_id]
-                verb = {"copy": "Kopiert", "move": "Verschoben", "duplicate": "Dupliziert"}[job.kind]
-                label = {"copy": "Kopieren", "move": "Verschieben", "duplicate": "Duplizieren"}[job.kind]
+                verb = {"copy": "Kopiert", "move": "Verschoben", "duplicate": "Dupliziert", "extract": "Entpackt"}[job.kind]
+                label = {"copy": "Kopieren", "move": "Verschieben", "duplicate": "Duplizieren", "extract": "Entpacken"}[job.kind]
                 ok = job.state == "done"
                 text = job.error if job.state == "failed" else "Abgebrochen" if job.state == "cancelled" else \
                     f"{verb}: {len(job.sources)} Element{'e' if len(job.sources) != 1 else ''}"
