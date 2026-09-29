@@ -12,6 +12,7 @@ from core.apps import all_apps, handlers
 from core.gitinfo import info as git_info
 from core.jump import fuzzy, rank
 from core.rename import apply as apply_rename, kebab, plan
+from core.thumbs import cache_path, fresh, generate
 from core.undo import revert
 from core.fs import checked_name, human, listing
 from core.theme import preset_colors, shell_theme
@@ -55,6 +56,8 @@ def main():
         git(Path(tmp))
     with tempfile.TemporaryDirectory() as tmp:
         apps(Path(tmp))
+    with tempfile.TemporaryDirectory() as tmp:
+        thumbs(Path(tmp))
     print("ok")
 
 
@@ -222,6 +225,23 @@ def apps(root):
     assert found["viewer.desktop"]["name"] == "Own Viewer", "the first XDG directory wins"
     assert "kde-paint.desktop" in found and "broken.desktop" not in found
     assert [a["name"] for a in handlers(["image/jpeg"], found)] == ["Paint"]
+
+
+def thumbs(root):
+    import shutil
+    import subprocess
+    if not shutil.which("ffmpeg"):
+        print("skip thumbs: no ffmpeg")
+        return
+    from PySide6.QtGui import QGuiApplication
+    app = QGuiApplication.instance() or QGuiApplication(["test", "-platform", "offscreen"])
+    film, cache = root / "film.mp4", root / "cache"
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=duration=1:size=320x180:rate=10", str(film)], check=True)
+    made = generate(str(film), str(cache))
+    assert made == cache_path(str(film), str(cache)) and fresh(str(film), made), made
+    os.utime(film, (1, 1))
+    assert not fresh(str(film), made), "a changed film invalidates its thumbnail"
+    del app
 
 
 if __name__ == "__main__":

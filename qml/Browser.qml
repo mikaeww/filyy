@@ -668,6 +668,18 @@ FocusScope {
                 required property int index
                 readonly property bool isPicked: root.picked[modelData.path] === true
                 readonly property bool isCut: root.app.board.cut && root.app.board.paths.includes(modelData.path)
+                // Bound, not set once: the grid reuses delegates for other files.
+                readonly property string cachedThumb: modelData.kind === "video" ? Thumbs.video(modelData.path) : ""
+                property var madeThumb: ({ path: "", url: "" })
+                readonly property string videoThumb: madeThumb.path === modelData.path ? madeThumb.url : cachedThumb
+
+                Connections {
+                    target: tile.modelData.kind === "video" ? Thumbs : null
+                    function onReady(path, url) {
+                        if (path === tile.modelData.path)
+                            tile.madeThumb = { path: path, url: url }
+                    }
+                }
 
                 width: grid.cellWidth
                 height: grid.cellHeight
@@ -695,7 +707,7 @@ FocusScope {
                         id: thumb
                         anchors.fill: parent
                         visible: status === Image.Ready
-                        source: tile.modelData.kind === "image" ? Util.fileUrl(tile.modelData.path) : ""
+                        source: tile.modelData.kind === "image" ? Util.fileUrl(tile.modelData.path) : tile.videoThumb
                         sourceSize: Qt.size(144, 128)
                         fillMode: Image.PreserveAspectFit
                         asynchronous: true
@@ -708,6 +720,24 @@ FocusScope {
                         width: 48
                         height: 48
                         kind: tile.modelData.kind
+                    }
+
+                    Rectangle {
+                        visible: thumb.visible && tile.modelData.kind === "video"
+                        anchors.centerIn: parent
+                        width: 22
+                        height: 22
+                        radius: Theme.square ? 0 : 11
+                        color: Qt.rgba(0, 0, 0, 0.55)
+
+                        Text {
+                            anchors.centerIn: parent
+                            anchors.horizontalCenterOffset: 1
+                            text: Util.glyphs.play
+                            color: "white"
+                            font.family: Theme.iconFont
+                            font.pixelSize: 12
+                        }
                     }
                 }
 
