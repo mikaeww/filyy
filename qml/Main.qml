@@ -440,7 +440,8 @@ Window {
             if (!entry)
                 return [{ label: Util.tr(I18n.strings, "Papierkorb leeren"), glyph: Util.glyphs.trash, danger: true, enabled: p.entries.length > 0, run: () => openSheet("empty") }]
             return [
-                { label: Util.tr(I18n.strings, "Wiederherstellen"), glyph: Util.glyphs.restore, hint: "Enter", run: () => Files.restore(p.targets) },
+                { label: Util.tr(I18n.strings, "Vorschau"), glyph: Util.glyphs.preview, hint: Util.tr(I18n.strings, "Leertaste"), enabled: p.targets.length === 1, run: () => quickLook.show(p.shown, p.cursor) },
+                { label: Util.tr(I18n.strings, "Wiederherstellen"), glyph: Util.glyphs.restore, run: () => Files.restore(p.targets) },
                 { label: Util.tr(I18n.strings, "Herkunft öffnen"), glyph: Util.glyphs.open, enabled: p.targets.length === 1 && entry.original !== "", run: () => p.navigate(entry.original.slice(0, entry.original.lastIndexOf("/")) || "/") },
                 { separator: true },
                 { label: Util.tr(I18n.strings, "Endgültig löschen"), glyph: Util.glyphs.trash, hint: Util.tr(I18n.strings, "Entf"), danger: true, run: () => openSheet("purge") }

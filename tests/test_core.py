@@ -386,13 +386,14 @@ def job_list(root):
     """The list QML shows must empty out once jobs finish (it once turned into the text "1 item")."""
     from PySide6.QtCore import QCoreApplication
     app = QCoreApplication.instance() or QCoreApplication([])
-    (root / "a.txt").write_text("a")
     (root / "out").mkdir()
     jobs = Jobs(lambda p: p)
     finished = []
     jobs.finished.connect(lambda ok, text, *_: finished.append((ok, text)))
-    for _ in range(3):
-        jobs.start("copy", [str(root / "a.txt")], str(root / "out"))
+    # Different files, so no job waits on a conflict question.
+    for i in range(3):
+        (root / f"a{i}.txt").write_text("a")
+        jobs.start("copy", [str(root / f"a{i}.txt")], str(root / "out"))
     for job in list(jobs._jobs.values()):
         job.thread.join(timeout=5)
     jobs._refresh()

@@ -140,8 +140,9 @@ FocusScope {
     function activate(entry) {
         if (!entry)
             return
+        // In the trash, opening only looks: restoring is a deliberate menu action.
         if (isTrash)
-            Files.restore(targets)
+            app.quickLook.show(shown, Math.max(0, shown.indexOf(entry)))
         else if (inArchive && !entry.dir)
             Files.openArchived(entry.path)
         else if (entry.dir || Files.isArchive(entry.path))
