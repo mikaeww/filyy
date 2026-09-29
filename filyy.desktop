@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Filyy
+GenericName=Dateimanager
+Comment=Dateien im Ghostly-QShell-Look durchsuchen
+Exec=filyy %u
+Icon=filyy
+Terminal=false
+Categories=System;FileTools;FileManager;
+MimeType=inode/directory;
+Keywords=Dateien;Explorer;Ordner;files;folder;
+StartupWMClass=filyy
