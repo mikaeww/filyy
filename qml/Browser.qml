@@ -26,20 +26,35 @@ FocusScope {
     property string pendingSelect: ""
     property bool editingPath: false
     property var git: ({})
+    // Storage map: rows largest first, the folder's total, and whether measuring finished.
+    property var usageRows: []
+    property real usageTotal: 0
+    property bool usageDone: false
+    property int usageRun: -1
     readonly property bool isTrash: path === app.trashPath
 
     readonly property var shown: {
         const needle = filterField.text.trim().toLowerCase()
-        return needle ? entries.filter(entry => entry.name.toLowerCase().includes(needle)) : entries
+        const base = view === "usage" && !isTrash ? usageRows : entries
+        return needle ? base.filter(entry => entry.name.toLowerCase().includes(needle)) : base
     }
     readonly property var current: shown[cursor] ?? null
     readonly property string filterText: filterField.text
     readonly property var pickedPaths: Object.keys(picked)
     readonly property var targets: pickedPaths.length ? pickedPaths : (current ? [current.path] : [])
-    readonly property Flickable activeView: isTrash ? graves : view === "grid" ? grid : list
+    readonly property Flickable activeView: isTrash ? graves : view === "grid" ? grid : view === "usage" ? usageList : list
     readonly property string title: isTrash ? "Papierkorb" : path === app.home ? "Home" : path.slice(path.lastIndexOf("/") + 1) || "/"
 
     Component.onCompleted: navigate(startPath)
+
+    onViewChanged: view === "usage" ? measure() : Usage.cancel()
+
+    function measure() {
+        usageRows = []
+        usageTotal = 0
+        usageDone = false
+        usageRun = Usage.start(path)
+    }
 
     function navigate(target) {
         const clean = target.trim().replace(/^~(?=\/|$)/, app.home).replace(/(.)\/+$/, "$1")
@@ -89,6 +104,8 @@ FocusScope {
         const result = Files.list(path, showHidden || isTrash)
         entries = isTrash ? Files.trashEntries() : result.entries
         error = result.error
+        if (view === "usage" && !isTrash)
+            measure()
         const kept = {}
         for (const entry of entries)
             if (picked[entry.path])
@@ -180,6 +197,18 @@ FocusScope {
     function anchorOf(index) {
         const item = activeView.itemAtIndex ? activeView.itemAtIndex(index) : null
         return item ? item.mapToItem(app.contentItem, 24, item.height / 2) : Qt.point(app.width / 2, app.height / 2)
+    }
+
+    Connections {
+        target: Usage
+
+        function onProgress(run, rows, total, done) {
+            if (run !== root.usageRun)
+                return
+            root.usageRows = rows
+            root.usageTotal = total
+            root.usageDone = done
+        }
     }
 
     Connections {
@@ -495,6 +524,7 @@ FocusScope {
 
             IconButton { visible: root.width >= 560 && !root.isTrash; glyph: Util.glyphs.list; label: "Liste"; active: root.view === "list"; onClicked: root.view = "list" }
             IconButton { visible: root.width >= 560 && !root.isTrash; glyph: Util.glyphs.grid; label: "Raster"; active: root.view === "grid"; onClicked: root.view = "grid" }
+            IconButton { visible: root.width >= 560 && !root.isTrash; glyph: Util.glyphs.usage; label: "Speicher-Karte"; active: root.view === "usage"; onClicked: root.view = root.view === "usage" ? "list" : "usage" }
             IconButton { visible: root.width >= 560 && !root.isTrash; glyph: root.showHidden ? Util.glyphs.eye : Util.glyphs.eyeOff; label: "Versteckte Dateien"; active: root.showHidden; onClicked: root.toggleHidden() }
             IconButton { visible: !root.isTrash; glyph: Util.glyphs.newFolder; label: "Neuer Ordner"; onClicked: root.app.openSheet("mkdir") }
             TextButton { visible: root.isTrash; label: "Papierkorb leeren"; enabled: root.entries.length > 0; opacity: enabled ? 1 : 0.35; onClicked: root.app.openSheet("empty") }
@@ -774,6 +804,128 @@ FocusScope {
 
         ScrollHint { flick: grid }
 
+        Text {
+            id: usageHead
+            visible: root.view === "usage" && !root.isTrash
+            x: 16
+            height: visible ? 24 : 0
+            verticalAlignment: Text.AlignVCenter
+            text: Util.size(root.usageTotal) + " belegt" + (root.usageDone ? "" : "  ·  misst …")
+            color: Theme.fgMuted
+            font.family: Theme.fontMono
+            font.pixelSize: 11
+        }
+
+        // Storage map: every child as a bar relative to the largest one.
+        ListView {
+            id: usageList
+
+            readonly property real largest: root.usageRows.length ? Math.max(1, root.usageRows[0].size) : 1
+
+            visible: root.view === "usage" && !root.isTrash
+            anchors.top: usageHead.bottom
+            anchors.topMargin: 4
+            anchors.bottom: parent.bottom
+            width: parent.width - 8
+            model: visible ? root.shown : []
+            boundsBehavior: Flickable.StopAtBounds
+            clip: true
+            bottomMargin: gitCard.shown ? gitCard.height + 16 : 0
+
+            EmptyArea { parent: usageList }
+
+            delegate: Rectangle {
+                id: bar
+
+                required property var modelData
+                required property int index
+                readonly property bool isPicked: root.picked[modelData.path] === true
+
+                width: usageList.width
+                height: 38
+                radius: Theme.control
+                color: isPicked ? Qt.alpha(Theme.accent, 0.13) : barArea.containsMouse ? Qt.alpha(Theme.fg, 0.04) : "transparent"
+                border.width: index === root.cursor && root.activeFocus && !isPicked ? 1 : 0
+                border.color: Qt.alpha(Theme.accent, 0.35)
+
+                FileIcon {
+                    id: barIcon
+                    x: 16
+                    width: 16
+                    height: 16
+                    anchors.verticalCenter: parent.verticalCenter
+                    kind: bar.modelData.kind
+                }
+
+                Text {
+                    id: barName
+                    anchors.left: barIcon.right
+                    anchors.leftMargin: 10
+                    width: Math.min(260, parent.width * 0.32)
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: bar.modelData.name
+                    elide: Text.ElideMiddle
+                    color: Theme.fg
+                    font.family: Theme.fontUi
+                    font.pixelSize: 13
+                }
+
+                Rectangle {
+                    id: track
+                    anchors.left: barName.right
+                    anchors.leftMargin: 12
+                    anchors.right: barSize.left
+                    anchors.rightMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    height: 8
+                    radius: Theme.square ? 0 : 4
+                    color: Qt.alpha(Theme.fg, 0.05)
+
+                    Rectangle {
+                        width: Math.max(2, parent.width * bar.modelData.size / usageList.largest)
+                        height: parent.height
+                        radius: parent.radius
+                        color: bar.modelData.dir ? Theme.accent : Qt.alpha(Theme.fgMuted, 0.7)
+                        Behavior on width { NumberAnimation { duration: Theme.enterMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Util.enter } }
+                    }
+                }
+
+                Text {
+                    id: barSize
+                    anchors.right: barShare.left
+                    anchors.rightMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 80
+                    horizontalAlignment: Text.AlignRight
+                    text: bar.modelData.pending ? "…" : Util.size(bar.modelData.size)
+                    color: bar.modelData.pending ? Theme.fgMuted : Theme.fg
+                    font.family: Theme.fontMono
+                    font.pixelSize: 11
+                }
+
+                Text {
+                    id: barShare
+                    anchors.right: parent.right
+                    anchors.rightMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 44
+                    horizontalAlignment: Text.AlignRight
+                    text: root.usageTotal > 0 && !bar.modelData.pending ? Math.round(100 * bar.modelData.size / root.usageTotal) + " %" : ""
+                    color: Theme.fgMuted
+                    font.family: Theme.fontMono
+                    font.pixelSize: 11
+                }
+
+                EntryArea {
+                    id: barArea
+                    index: bar.index
+                    entry: bar.modelData
+                }
+            }
+        }
+
+        ScrollHint { flick: usageList }
+
         // The trash as a graveyard: a pixel tombstone per item, with where it lived and when it went.
         GridView {
             id: graves
@@ -876,7 +1028,7 @@ FocusScope {
 
         Column {
             anchors.centerIn: parent
-            visible: root.shown.length === 0
+            visible: root.shown.length === 0 && !(root.view === "usage" && !root.usageDone)
             spacing: 6
 
             Ghost {

@@ -15,6 +15,7 @@ from core.rename import apply as apply_rename, kebab, plan
 from core.search import parse as parse_match
 from core.thumbs import cache_path, fresh, generate
 from core.undo import revert
+from core.usage import disk_usage
 from core.fs import checked_name, human, listing
 from core.theme import preset_colors, shell_theme
 
@@ -60,6 +61,8 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         thumbs(Path(tmp))
     search()
+    with tempfile.TemporaryDirectory() as tmp:
+        usage(Path(tmp))
     print("ok")
 
 
@@ -254,6 +257,18 @@ def search():
     assert match["relative"] == "a/notiz.md" and match["line"] == 7
     assert match["text"][match["start"]:match["end"]] == "Geist", "rg byte offsets become character offsets"
     assert parse_match(json.dumps({"type": "begin", "data": {}}), "/p") is None
+
+
+def usage(root):
+    (root / "big").mkdir()
+    (root / "big" / "data.bin").write_bytes(os.urandom(256 * 1024))
+    (root / "big" / "inner").mkdir()
+    (root / "big" / "inner" / "more.bin").write_bytes(os.urandom(128 * 1024))
+    os.symlink(root / "big", root / "link")
+    device = os.lstat(root).st_dev
+    size = disk_usage(str(root / "big"), device, lambda: True)
+    assert 384 * 1024 <= size < 512 * 1024, size
+    assert disk_usage(str(root / "link"), device, lambda: True) < 4096, "symlinks are not followed"
 
 
 if __name__ == "__main__":

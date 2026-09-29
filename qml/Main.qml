@@ -473,6 +473,7 @@ Window {
     Shortcut { sequence: "Alt+Up"; onActivated: win.pane.up() }
     Shortcut { sequence: "Ctrl+1"; onActivated: win.pane.view = "list" }
     Shortcut { sequence: "Ctrl+2"; onActivated: win.pane.view = "grid" }
+    Shortcut { sequence: "Ctrl+3"; onActivated: win.pane.view = "usage" }
 
     ListModel { id: tabModel }
 
