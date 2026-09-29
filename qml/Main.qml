@@ -73,9 +73,10 @@ Window {
         const saved = session && session.tabs ? Array.from(session.tabs).filter(t => t && Files.exists(t.path)) : []
         if (saved.length) {
             for (const t of saved)
-                tabModel.append({ start: t.path, split: !!t.split, second: t.second && Files.exists(t.second) ? t.second : t.path })
+                tabModel.append({ start: t.path, split: !!t.split, vertical: !!t.vertical,
+                                  second: t.second && Files.exists(t.second) ? t.second : t.path })
         } else {
-            tabModel.append({ start: startPath, split: false, second: startPath })
+            tabModel.append({ start: startPath, split: false, vertical: false, second: startPath })
         }
         entrance.start()
         Qt.callLater(() => {
@@ -108,7 +109,8 @@ Window {
             const owner = tabs.itemAt(i)
             if (!owner || !owner.first.path)
                 continue
-            tabsNow.push({ path: owner.first.path, split: owner.split, second: owner.secondPane ? owner.secondPane.path : owner.first.path })
+            tabsNow.push({ path: owner.first.path, split: owner.split, vertical: owner.vertical,
+                           second: owner.secondPane ? owner.secondPane.path : owner.first.path })
         }
         if (tabsNow.length)
             Prefs.set("session", { tabs: tabsNow, index: tabIndex })
@@ -124,7 +126,7 @@ Window {
     }
 
     function newTab(path) {
-        tabModel.append({ start: path, split: false, second: path })
+        tabModel.append({ start: path, split: false, vertical: false, second: path })
         Qt.callLater(() => switchTab(tabModel.count - 1))
     }
 
@@ -158,6 +160,48 @@ Window {
         Qt.callLater(() => {
             focusPane(owner.split ? owner.secondPane : owner.first)
             pane.focusList()
+            saveSession()
+        })
+    }
+
+    // A tab chip dragged over the panes: {index, x, y} in window coordinates, or null.
+    property var tabDrag: null
+    readonly property string tabDropZone: tabDrag ? dropZoneAt(tabDrag.x, tabDrag.y) : ""
+
+    // "right" or "bottom" when a dragged tab would become the other half of the current tab.
+    function dropZoneAt(x, y) {
+        if (!tabDrag || tabDrag.index === tabIndex)
+            return ""
+        const at = panes.mapFromItem(win.contentItem, x, y)
+        if (at.x < 0 || at.y < 0 || at.x > panes.width || at.y > panes.height)
+            return ""
+        return at.x > panes.width * 0.55 ? "right" : at.y > panes.height * 0.55 ? "bottom" : ""
+    }
+
+    // Dropping tab `index` beside or under the current one makes it that tab's second pane.
+    function dropTab(index, x, y) {
+        const zone = dropZoneAt(x, y)
+        tabDrag = null
+        const owner = tabs.itemAt(tabIndex)
+        const dragged = tabs.itemAt(index)
+        if (!zone || !owner || !dragged)
+            return
+        const path = dragged.first.path
+        tabModel.setProperty(tabIndex, "vertical", zone === "bottom")
+        if (owner.split) {
+            owner.secondPane.navigate(path)
+        } else {
+            tabModel.setProperty(tabIndex, "second", path)
+            tabModel.setProperty(tabIndex, "split", true)
+        }
+        const keep = index < tabIndex ? tabIndex - 1 : tabIndex
+        tabModel.remove(index)
+        switchTab(keep)
+        Qt.callLater(() => {
+            if (owner.secondPane) {
+                focusPane(owner.secondPane)
+                pane.focusList()
+            }
             saveSession()
         })
     }
@@ -643,13 +687,44 @@ Window {
                             font.weight: chip.current ? Font.DemiBold : Font.Normal
                         }
 
+                        // Click switches, middle click closes, dragging onto the panes splits (see dropTab).
                         MouseArea {
                             id: chipPointer
+
+                            property point pressAt
+                            property bool dragging: false
+
                             anchors.fill: parent
                             hoverEnabled: true
                             acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: mouse => mouse.button === Qt.MiddleButton ? win.closeTab(chip.index) : win.switchTab(chip.index)
+                            cursorShape: dragging ? Qt.ClosedHandCursor : Qt.PointingHandCursor
+                            onPressed: mouse => {
+                                pressAt = Qt.point(mouse.x, mouse.y)
+                                dragging = false
+                            }
+                            onPositionChanged: mouse => {
+                                if (!pressed || mouse.buttons !== Qt.LeftButton)
+                                    return
+                                if (!dragging && Math.hypot(mouse.x - pressAt.x, mouse.y - pressAt.y) > 8)
+                                    dragging = true
+                                if (dragging) {
+                                    const at = mapToItem(win.contentItem, mouse.x, mouse.y)
+                                    win.tabDrag = { index: chip.index, x: at.x, y: at.y, title: chipText.text }
+                                }
+                            }
+                            onReleased: mouse => {
+                                if (dragging) {
+                                    const at = mapToItem(win.contentItem, mouse.x, mouse.y)
+                                    dragging = false
+                                    win.dropTab(chip.index, at.x, at.y)
+                                } else if (containsMouse) {
+                                    mouse.button === Qt.MiddleButton ? win.closeTab(chip.index) : win.switchTab(chip.index)
+                                }
+                            }
+                            onCanceled: {
+                                dragging = false
+                                win.tabDrag = null
+                            }
                         }
 
                         Text {
@@ -681,6 +756,23 @@ Window {
                 anchors.bottom: parent.bottom
                 width: parent.width
 
+                Rectangle {
+                    visible: win.tabDropZone !== ""
+                    x: (win.tabDropZone === "right" ? panes.width / 2 : 0) + 6
+                    y: (win.tabDropZone === "bottom" ? panes.height / 2 : 0) + 6
+                    width: (win.tabDropZone === "right" ? panes.width / 2 : panes.width) - 12
+                    height: (win.tabDropZone === "bottom" ? panes.height / 2 : panes.height) - 12
+                    z: 50
+                    radius: Theme.control + 4
+                    color: Qt.alpha(Theme.accent, 0.1)
+                    border.width: 1
+                    border.color: Qt.alpha(Theme.accent, 0.5)
+                    Behavior on x { NumberAnimation { duration: Theme.quickMs } }
+                    Behavior on y { NumberAnimation { duration: Theme.quickMs } }
+                    Behavior on width { NumberAnimation { duration: Theme.quickMs } }
+                    Behavior on height { NumberAnimation { duration: Theme.quickMs } }
+                }
+
                 Repeater {
                     id: tabs
 
@@ -693,6 +785,7 @@ Window {
                         required property string start
                         required property string second
                         required property bool split
+                        required property bool vertical
                         property var lastPane: first
                         readonly property alias first: first
                         readonly property var secondPane: secondLoader.item
@@ -707,26 +800,27 @@ Window {
                             id: first
                             app: win
                             startPath: tabItem.start
-                            width: tabItem.split ? Math.floor((parent.width - 1) / 2) : parent.width
-                            height: parent.height
+                            width: tabItem.split && !tabItem.vertical ? Math.floor((parent.width - 1) / 2) : parent.width
+                            height: tabItem.split && tabItem.vertical ? Math.floor((parent.height - 1) / 2) : parent.height
                             Component.onCompleted: if (!win.pane) win.focusPane(first)
                         }
 
                         Rectangle {
                             visible: tabItem.split
-                            x: first.width
-                            y: 16
-                            width: 1
-                            height: parent.height - 32
+                            x: tabItem.vertical ? 16 : first.width
+                            y: tabItem.vertical ? first.height : 16
+                            width: tabItem.vertical ? parent.width - 32 : 1
+                            height: tabItem.vertical ? 1 : parent.height - 32
                             color: Theme.hairline
                         }
 
                         Loader {
                             id: secondLoader
                             active: tabItem.split
-                            x: first.width + 1
+                            x: tabItem.vertical ? 0 : first.width + 1
+                            y: tabItem.vertical ? first.height + 1 : 0
                             width: parent.width - x
-                            height: parent.height
+                            height: parent.height - y
                             onActiveChanged: if (!active && win.pane !== tabItem.first) win.focusPane(tabItem.first)
 
                             sourceComponent: Browser {
@@ -738,6 +832,30 @@ Window {
                     }
                 }
             }
+        }
+    }
+
+    // The dragged tab following the pointer; where it would land is drawn inside the panes.
+    Rectangle {
+        visible: win.tabDrag !== null
+        x: win.tabDrag ? win.tabDrag.x - width / 2 : 0
+        y: win.tabDrag ? win.tabDrag.y - height / 2 : 0
+        z: 4
+        width: dragTitle.implicitWidth + 28
+        height: 30
+        radius: Theme.control
+        color: Theme.panelBg
+        border.width: 1
+        border.color: Qt.alpha(Theme.accent, 0.5)
+        opacity: 0.9
+
+        Text {
+            id: dragTitle
+            anchors.centerIn: parent
+            text: win.tabDrag ? win.tabDrag.title : ""
+            color: Theme.fg
+            font.family: Theme.fontUi
+            font.pixelSize: 12
         }
     }
 

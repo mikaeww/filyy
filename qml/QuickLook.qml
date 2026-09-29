@@ -15,6 +15,9 @@ Sheet {
     readonly property var text: entry && ["text", "code", "file"].includes(kind) ? Preview.text(entry.path) : null
     readonly property bool showsText: text !== null && !text.binary
     readonly property bool media: kind === "video" || kind === "audio"
+    // Space on a folder (or an archive) shows what is inside it.
+    readonly property bool folderish: entry !== null && (entry.dir || Files.isArchive(entry.path))
+    readonly property var inside: open && folderish ? Files.peek(entry.path) : []
 
     function show(list, at) {
         items = list
@@ -79,7 +82,8 @@ Sheet {
 
             Text {
                 width: parent.width
-                text: root.entry ? (root.entry.dir ? Util.tr(I18n.strings, "Ordner") : Util.size(root.entry.size)) + "  ·  " + Files.mimeName(root.entry.path)
+                text: root.entry ? (root.folderish ? Util.tr(I18n.strings, "{n} Elemente", { n: root.inside.length })
+                                                   : Util.size(root.entry.size) + "  ·  " + Files.mimeName(root.entry.path))
                     + (root.kind === "pdf" && pdf.frameCount > 0 ? "  ·  " + Util.tr(I18n.strings, "Seite {page} / {count}", { page: root.page + 1, count: pdf.frameCount }) : "") : ""
                 elide: Text.ElideRight
                 color: Theme.fgMuted
@@ -173,9 +177,50 @@ Sheet {
 
         ScrollHint { flick: textView }
 
+        GridView {
+            id: insideGrid
+            anchors.fill: parent
+            anchors.margins: 12
+            visible: root.folderish && root.inside.length > 0
+            model: visible ? root.inside : []
+            cellWidth: Math.floor(width / Math.max(1, Math.floor(width / 112)))
+            cellHeight: 104
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+
+            delegate: Item {
+                required property var modelData
+                width: insideGrid.cellWidth
+                height: insideGrid.cellHeight
+
+                FileIcon {
+                    id: insideIcon
+                    x: (parent.width - width) / 2
+                    y: 10
+                    width: 48
+                    height: 48
+                    kind: parent.modelData.kind
+                }
+
+                Text {
+                    x: 6
+                    y: insideIcon.y + insideIcon.height + 6
+                    width: parent.width - 12
+                    horizontalAlignment: Text.AlignHCenter
+                    text: parent.modelData.name
+                    elide: Text.ElideMiddle
+                    color: Theme.fg
+                    font.family: Theme.fontUi
+                    font.pixelSize: 11
+                }
+            }
+        }
+
+        ScrollHint { flick: insideGrid }
+
         Column {
             anchors.centerIn: parent
-            visible: !root.showsText && !["image", "pdf", "video", "audio"].includes(root.kind)
+            visible: !root.showsText && !["image", "pdf", "video", "audio"].includes(root.kind) && !insideGrid.visible
             spacing: 10
 
             FileIcon {

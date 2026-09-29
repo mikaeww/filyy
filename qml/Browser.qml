@@ -13,6 +13,7 @@ FocusScope {
     property string startView: Prefs.get("view", "list")
 
     readonly property bool isActive: app.pane === root
+    readonly property bool listFocused: listKeys.activeFocus
     readonly property real padding: app.compact ? 14 : 20
 
     property string path: ""
@@ -206,8 +207,10 @@ FocusScope {
         pathField.selectAll()
     }
 
+    // Focus goes to a plain item, not to the scope: a FocusScope hands its focus back to the last focused
+    // child, which kept the filter field grabbing every key after one click into it.
     function focusList() {
-        root.forceActiveFocus()
+        listKeys.forceActiveFocus()
     }
 
     // Right edge of an entry in window coordinates, for menus opened from the keyboard.
@@ -265,6 +268,11 @@ FocusScope {
         }
     }
 
+    Item {
+        id: listKeys
+        focus: true
+    }
+
     Keys.onPressed: event => {
         const ctrl = event.modifiers & Qt.ControlModifier
         const shift = event.modifiers & Qt.ShiftModifier
@@ -278,7 +286,7 @@ FocusScope {
         else if (event.key === Qt.Key_PageDown) moveCursor(10 * columns, shift)
         else if (event.key === Qt.Key_PageUp) moveCursor(-10 * columns, shift)
         else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) activate(current)
-        else if (event.key === Qt.Key_Space && current && !inArchive) app.quickLook.show(shown, cursor)
+        else if (event.key === Qt.Key_Space && current && (!inArchive || current.dir)) app.quickLook.show(shown, cursor)
         else if (event.key === Qt.Key_Backspace) up()
         else if (event.key === Qt.Key_Delete && !inArchive) app.openSheet(isTrash ? "purge" : shift ? "delete" : "trash")
         else if (readOnly && (event.key === Qt.Key_Delete || event.key === Qt.Key_F2 || event.key === Qt.Key_F10
@@ -617,7 +625,7 @@ FocusScope {
                 radius: Theme.control
                 color: isPicked ? Qt.alpha(Theme.accent, 0.13)
                     : rowArea.containsMouse || rowDrop.containsDrag ? Qt.alpha(Theme.fg, 0.04) : "transparent"
-                border.width: index === root.cursor && root.activeFocus && !isPicked ? 1 : 0
+                border.width: index === root.cursor && root.listFocused && !isPicked ? 1 : 0
                 border.color: Qt.alpha(Theme.accent, 0.35)
                 opacity: isCut ? 0.45 : 1
                 Behavior on color { ColorAnimation { duration: Theme.quickMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Util.quick } }
@@ -740,7 +748,7 @@ FocusScope {
                     radius: Theme.control
                     color: tile.isPicked ? Qt.alpha(Theme.accent, 0.13)
                         : tileArea.containsMouse || tileDrop.containsDrag ? Qt.alpha(Theme.fg, 0.04) : "transparent"
-                    border.width: tile.index === root.cursor && root.activeFocus ? 1 : 0
+                    border.width: tile.index === root.cursor && root.listFocused ? 1 : 0
                     border.color: Qt.alpha(Theme.accent, tile.isPicked ? 0.5 : 0.35)
                     Behavior on color { ColorAnimation { duration: Theme.quickMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Util.quick } }
                 }
@@ -864,7 +872,7 @@ FocusScope {
                 height: 38
                 radius: Theme.control
                 color: isPicked ? Qt.alpha(Theme.accent, 0.13) : barArea.containsMouse ? Qt.alpha(Theme.fg, 0.04) : "transparent"
-                border.width: index === root.cursor && root.activeFocus && !isPicked ? 1 : 0
+                border.width: index === root.cursor && root.listFocused && !isPicked ? 1 : 0
                 border.color: Qt.alpha(Theme.accent, 0.35)
 
                 FileIcon {
@@ -975,7 +983,7 @@ FocusScope {
                     anchors.margins: 4
                     radius: Theme.control
                     color: grave.isPicked ? Qt.alpha(Theme.accent, 0.13) : graveArea.containsMouse ? Qt.alpha(Theme.fg, 0.04) : "transparent"
-                    border.width: grave.index === root.cursor && root.activeFocus ? 1 : 0
+                    border.width: grave.index === root.cursor && root.listFocused ? 1 : 0
                     border.color: Qt.alpha(Theme.accent, grave.isPicked ? 0.5 : 0.35)
                     Behavior on color { ColorAnimation { duration: Theme.quickMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Util.quick } }
                 }
@@ -1084,7 +1092,8 @@ FocusScope {
         anchors.bottomMargin: 12
         z: 3
         width: Math.min(300, root.width - 2 * root.padding)
-        info: root.git
+        // A half-height split pane has no room for it.
+        info: root.height >= 480 ? root.git : ({})
     }
 
     Item {

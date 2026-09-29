@@ -169,6 +169,16 @@ class Files(QObject):
         info = QStorageInfo(path)
         return tr("{size} frei", size=human(info.bytesAvailable())) if info.isValid() else ""
 
+    @Slot(str, result="QVariantList")
+    def peek(self, path):
+        """A folder's (or archive folder's) entries without touching the watched folder, for quick look."""
+        inside = archive.split(path)
+        try:
+            found = archive.listing(inside[0], inside[1], kind_of, natural_key) if inside else listing(path, False)
+        except (OSError, ValueError):
+            return []
+        return found["entries"]
+
     @Slot(str, result=int)
     def count(self, path):
         try:
