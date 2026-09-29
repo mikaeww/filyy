@@ -556,15 +556,13 @@ FocusScope {
                     color: Theme.accent
                 }
 
-                Text {
+                FileIcon {
                     id: rowGlyph
                     x: 16
-                    width: 18
+                    width: 16
+                    height: 16
                     anchors.verticalCenter: parent.verticalCenter
-                    text: Util.glyphs[row.modelData.kind] ?? Util.glyphs.file
-                    color: row.modelData.dir || row.isPicked ? Theme.fg : Theme.fgMuted
-                    font.family: Theme.iconFont
-                    font.pixelSize: 16
+                    kind: row.modelData.kind
                 }
 
                 Text {
@@ -677,13 +675,12 @@ FocusScope {
                         cache: true
                     }
 
-                    Text {
+                    FileIcon {
                         anchors.centerIn: parent
                         visible: !thumb.visible
-                        text: Util.glyphs[tile.modelData.kind] ?? Util.glyphs.file
-                        color: tile.modelData.dir ? Theme.fg : Theme.fgMuted
-                        font.family: Theme.iconFont
-                        font.pixelSize: 46
+                        width: 48
+                        height: 48
+                        kind: tile.modelData.kind
                     }
                 }
 
