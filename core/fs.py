@@ -2,6 +2,8 @@
 import os
 import re
 
+from core.i18n import tr
+
 KINDS = [
     ("image", {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg", ".avif", ".heic"}),
     ("video", {".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v"}),
@@ -50,7 +52,7 @@ def listing(path, show_hidden):
 def checked_name(name):
     name = name.strip()
     if not name or name in (".", "..") or "/" in name or "\0" in name:
-        raise ValueError("Ungültiger Name")
+        raise ValueError(tr("Ungültiger Name"))
     return name
 
 

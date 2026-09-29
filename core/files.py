@@ -5,7 +5,7 @@ import subprocess
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import (QFileSystemWatcher, QMimeData, QMimeDatabase, QObject, QStorageInfo, QTimer, QUrl,
+from PySide6.QtCore import (QFileSystemWatcher, QMimeData, QMimeDatabase, QObject, QStandardPaths, QStorageInfo, QTimer, QUrl,
                             Signal, Slot)
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 
@@ -14,6 +14,7 @@ import hashlib
 from core import archive
 from core import trash as trashcan
 from core.fs import checked_name, human, kind_of, listing, natural_key
+from core.i18n import tr
 from core.jobs import free_name
 
 HOME = str(Path.home())
@@ -55,7 +56,7 @@ class Files(QObject):
             try:
                 return archive.listing(inside[0], inside[1], kind_of, natural_key)
             except (OSError, ValueError, archive.zipfile.BadZipFile, archive.tarfile.TarError) as error:
-                return {"path": path, "entries": [], "error": f"Archiv nicht lesbar: {error}"}
+                return {"path": path, "entries": [], "error": tr("Archiv nicht lesbar: {error}", error=error)}
         return listing(path, show_hidden)
 
     @Slot(str, result=bool)
@@ -101,7 +102,7 @@ class Files(QObject):
                 with open(target, "wb") as out:
                     shutil.copyfileobj(handle, out)
             self.extracted.emit(target)
-        self._run(work, "Aus dem Archiv geöffnet")
+        self._run(work, tr("Aus dem Archiv geöffnet"))
 
     @Slot(result=str)
     def home(self):
@@ -109,17 +110,22 @@ class Files(QObject):
 
     @Slot(result="QVariantList")
     def places(self):
-        wanted = [("Home", HOME, "home"), ("Desktop", HOME + "/Desktop", "desktop"),
-                  ("Dokumente", HOME + "/Dokumente", "docs"), ("Downloads", HOME + "/Downloads", "download"),
-                  ("Bilder", HOME + "/Bilder", "image"), ("Musik", HOME + "/Musik", "music"),
-                  ("Videos", HOME + "/Videos", "video"), ("Projekte", HOME + "/Projekte", "code")]
-        out = [{"name": n, "path": p, "icon": i, "group": "Orte"} for n, p, i in wanted if os.path.isdir(p)]
+        # The user's own XDG folders, named as they are on disk, so they match any language.
+        wanted = [(tr("Home"), HOME, "home")]
+        for kind, icon in ((QStandardPaths.DesktopLocation, "desktop"), (QStandardPaths.DocumentsLocation, "docs"),
+                           (QStandardPaths.DownloadLocation, "download"), (QStandardPaths.PicturesLocation, "image"),
+                           (QStandardPaths.MusicLocation, "music"), (QStandardPaths.MoviesLocation, "video")):
+            folder = QStandardPaths.writableLocation(kind)
+            if folder and folder != HOME:
+                wanted.append((os.path.basename(folder), folder, icon))
+        wanted += [(name, os.path.join(HOME, name), "code") for name in ("Projects", "Projekte")]
+        out = [{"name": n, "path": p, "icon": i, "group": tr("Orte")} for n, p, i in wanted if os.path.isdir(p)]
         for volume in QStorageInfo.mountedVolumes():
             root = volume.rootPath()
             if volume.isValid() and volume.isReady() and (root == "/" or root.startswith(("/run/media/", "/media/", "/mnt/"))):
-                out.append({"name": "System" if root == "/" else (volume.displayName() or os.path.basename(root)),
-                            "path": root, "icon": "drive", "group": "Geräte"})
-        out.append({"name": "Papierkorb", "path": self.trashPath(), "icon": "trash", "group": "Geräte"})
+                out.append({"name": tr("System") if root == "/" else (volume.displayName() or os.path.basename(root)),
+                            "path": root, "icon": "drive", "group": tr("Geräte")})
+        out.append({"name": tr("Papierkorb"), "path": self.trashPath(), "icon": "trash", "group": tr("Geräte")})
         return out
 
     @Slot(result=str)
@@ -149,19 +155,19 @@ class Files(QObject):
                 # Undoing a restore puts the item back into the trash.
                 steps.append(("created", last))
             return last
-        self._run(work, f"{len(paths)} wiederhergestellt", "Wiederherstellen")
+        self._run(work, tr("{n} wiederhergestellt", n=len(paths)), "Wiederherstellen")
 
     @Slot("QVariantList")
     def purge(self, paths):
         def work(steps):
             for path in paths:
                 trashcan.purge(path)
-        self._run(work, f"{len(paths)} endgültig gelöscht")
+        self._run(work, tr("{n} endgültig gelöscht", n=len(paths)))
 
     @Slot(str, result=str)
     def space(self, path):
         info = QStorageInfo(path)
-        return f"{human(info.bytesAvailable())} frei" if info.isValid() else ""
+        return tr("{size} frei", size=human(info.bytesAvailable())) if info.isValid() else ""
 
     @Slot(str, result=int)
     def count(self, path):
@@ -213,7 +219,7 @@ class Files(QObject):
             os.mkdir(target)
             steps.append(("created", target))
             return target
-        self._run(work, "Ordner erstellt", "Neuer Ordner")
+        self._run(work, tr("Ordner erstellt"), "Neuer Ordner")
 
     @Slot(str, str)
     def rename(self, path, name):
@@ -221,18 +227,18 @@ class Files(QObject):
             target = os.path.join(os.path.dirname(path), checked_name(name))
             if target != path:
                 if os.path.lexists(target):
-                    raise FileExistsError("Der Name ist schon vergeben")
+                    raise FileExistsError(tr("Der Name ist schon vergeben"))
                 os.rename(path, target)
                 steps.append(("renamed", path, target))
             return target
-        self._run(work, "Umbenannt", "Umbenennen")
+        self._run(work, tr("Umbenannt"), "Umbenennen")
 
     @Slot("QVariantList")
     def trash(self, paths):
         def work(steps):
             for path in paths:
                 steps.append(("trashed", path, trashcan.trash(path)))
-        self._run(work, f"{len(paths)} in den Papierkorb gelegt", "Papierkorb")
+        self._run(work, tr("{n} in den Papierkorb gelegt", n=len(paths)), "Papierkorb")
 
     @Slot("QVariantList")
     def remove(self, paths):
@@ -242,7 +248,7 @@ class Files(QObject):
                     shutil.rmtree(path)
                 else:
                     os.remove(path)
-        self._run(work, f"{len(paths)} endgültig gelöscht")
+        self._run(work, tr("{n} endgültig gelöscht", n=len(paths)))
 
     @Slot("QVariantList")
     def duplicate(self, paths):

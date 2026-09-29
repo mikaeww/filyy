@@ -29,16 +29,27 @@ function visit(state, path) {
     return { list: list, index: list.length - 1 }
 }
 
+// Translated text for a German key; {name} placeholders come from values, "one|many" picks by values.n.
+function tr(strings, text, values) {
+    var out = strings && strings[text] !== undefined ? strings[text] : text
+    if (values && out.indexOf("|") >= 0 && values.n !== undefined)
+        out = out.split("|")[values.n === 1 ? 0 : 1]
+    if (values)
+        out = out.replace(/\{(\w+)\}/g, function (all, key) { return values[key] !== undefined ? values[key] : all })
+    return out
+}
+
 // "vor 5 Min" style relative time for a unix timestamp in seconds.
-function ago(seconds) {
+function ago(strings, seconds) {
     if (!seconds)
         return ""
     var diff = Math.max(0, Date.now() / 1000 - seconds)
-    var steps = [[60, "gerade eben", 1], [3600, "Min", 60], [86400, "Std", 3600], [604800, "Tagen", 86400],
-                 [2629800, "Wochen", 604800], [31557600, "Monaten", 2629800], [Infinity, "Jahren", 31557600]]
+    var steps = [[60, "gerade eben", 1], [3600, "vor {n} Min", 60], [86400, "vor {n} Std", 3600],
+                 [604800, "vor {n} Tagen", 86400], [2629800, "vor {n} Wochen", 604800],
+                 [31557600, "vor {n} Monaten", 2629800], [Infinity, "vor {n} Jahren", 31557600]]
     for (var i = 0; i < steps.length; i++) {
         if (diff < steps[i][0])
-            return i === 0 ? steps[i][1] : "vor " + Math.floor(diff / steps[i][2]) + " " + steps[i][1]
+            return tr(strings, steps[i][1], { n: Math.floor(diff / steps[i][2]) })
     }
     return ""
 }
@@ -86,7 +97,7 @@ var glyphs = {
     refresh: "\u{F0450}", split: "\u{F0BCC}", tab: "\u{F04E9}", undo: "\u{F054C}", jump: "\u{F0968}",
     git: "\u{F02A2}", branch: "\u{F062C}", commit: "\u{F0718}", usage: "\u{F0E94}", pause: "\u{F03E4}",
     play: "\u{F040A}", cancel: "\u{F073A}", restore: "\u{F099B}", grave: "\u{F0BA2}", apps: "\u{F003B}",
-    textSearch: "\u{F13B8}", extract: "\u{F03D4}", preview: "\u{F06D0}", batch: "\u{F060E}"
+    textSearch: "\u{F13B8}", extract: "\u{F03D4}", preview: "\u{F06D0}", batch: "\u{F060E}", settings: "\u{F08BB}"
 }
 
 // Place icons use their own names so "image" can differ between a file and the Bilder folder.

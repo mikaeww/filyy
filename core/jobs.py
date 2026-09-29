@@ -12,6 +12,7 @@ import time
 from PySide6.QtCore import QObject, QTimer, Property, Signal, Slot
 
 from core import archive
+from core.i18n import tr
 
 CHUNK = 1 << 20
 
@@ -25,7 +26,7 @@ def free_name(folder, name):
     stem, suffix = (name, "") if os.path.isdir(candidate) else os.path.splitext(name)
     number = 1
     while os.path.lexists(candidate):
-        candidate = os.path.join(folder, f"{stem} (Kopie{'' if number == 1 else ' ' + str(number)}){suffix}")
+        candidate = os.path.join(folder, f"{stem} ({tr('Kopie')}{'' if number == 1 else ' ' + str(number)}){suffix}")
         number += 1
     return candidate
 
@@ -116,11 +117,11 @@ class Job:
             for source in self.sources:
                 self._check()
                 if not os.path.lexists(source):
-                    raise FileNotFoundError(f"Nicht gefunden: {os.path.basename(source)}")
+                    raise FileNotFoundError(tr("Nicht gefunden: {name}", name=os.path.basename(source)))
                 real = os.path.realpath(source)
                 if os.path.isdir(source) and not os.path.islink(source) and \
                         os.path.commonpath((real, os.path.realpath(self.folder))) == real:
-                    raise ValueError("Ein Ordner kann nicht in sich selbst landen")
+                    raise ValueError(tr("Ein Ordner kann nicht in sich selbst landen"))
                 if self.kind == "duplicate":
                     target = free_name(os.path.dirname(source), os.path.basename(source))
                     self._fresh_copy(source, target)
@@ -342,11 +343,15 @@ class Jobs(QObject):
         for job_id, job in list(self._jobs.items()):
             if job.state in ("done", "failed", "cancelled"):
                 del self._jobs[job_id]
-                verb = {"copy": "Kopiert", "move": "Verschoben", "duplicate": "Dupliziert", "extract": "Entpackt"}[job.kind]
+                done = {"copy": "Kopiert: {items}", "move": "Verschoben: {items}", "duplicate": "Dupliziert: {items}",
+                        "extract": "Entpackt: {items}"}[job.kind]
+                # Stored untranslated: undo labels are translated when they are shown.
                 label = {"copy": "Kopieren", "move": "Verschieben", "duplicate": "Duplizieren", "extract": "Entpacken"}[job.kind]
                 ok = job.state == "done"
-                text = job.error if job.state == "failed" else "Abgebrochen" if job.state == "cancelled" else \
-                    f"{verb}: {len(job.sources)} Element{'e' if len(job.sources) != 1 else ''}"
+                count = len(job.sources)
+                items = tr("{n} Element" if count == 1 else "{n} Elemente", n=count)
+                text = job.error if job.state == "failed" else tr("Abgebrochen") if job.state == "cancelled" else \
+                    tr(done, items=items)
                 self.finished.emit(ok, text, job.last, label, [list(entry) for entry in job.log])
                 continue
             elapsed = max(0.1, time.monotonic() - job.started)

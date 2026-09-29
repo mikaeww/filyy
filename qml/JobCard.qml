@@ -33,10 +33,14 @@ Rectangle {
 
         Text {
             width: parent.width
-            text: (root.paused ? "Pausiert: " : "")
-                + ({ copy: "Kopiere ", move: "Verschiebe ", duplicate: "Dupliziere " })[root.job.kind]
-                + root.job.count + (root.job.count === 1 ? " Element" : " Elemente")
-                + (root.job.kind === "duplicate" ? "" : " nach " + root.job.folder.slice(root.job.folder.lastIndexOf("/") + 1))
+            text: {
+                const what = Util.tr(I18n.strings, ({ copy: "Kopiere {items} nach {folder}", move: "Verschiebe {items} nach {folder}",
+                                                     duplicate: "Dupliziere {items}", extract: "Entpacke {items} nach {folder}" })[root.job.kind], {
+                    items: Util.tr(I18n.strings, root.job.count === 1 ? "{n} Element" : "{n} Elemente", { n: root.job.count }),
+                    folder: root.job.folder.slice(root.job.folder.lastIndexOf("/") + 1)
+                })
+                return root.paused ? Util.tr(I18n.strings, "Pausiert: {what}", { what: what }) : what
+            }
             elide: Text.ElideRight
             color: Theme.fg
             font.family: Theme.fontUi
@@ -70,7 +74,7 @@ Rectangle {
         }
 
         Text {
-            text: Util.size(root.job.done) + " von " + Util.size(root.job.total)
+            text: Util.tr(I18n.strings, "{done} von {total}", { done: Util.size(root.job.done), total: Util.size(root.job.total) })
                 + (root.paused || root.job.rate < 1 ? "" : "  ·  " + Util.size(root.job.rate) + "/s")
             color: Theme.fgMuted
             font.family: Theme.fontMono
@@ -88,13 +92,13 @@ Rectangle {
 
         IconButton {
             glyph: root.paused ? Util.glyphs.play : Util.glyphs.pause
-            label: root.paused ? "Fortsetzen" : "Pausieren"
+            label: root.paused ? Util.tr(I18n.strings, "Fortsetzen") : Util.tr(I18n.strings, "Pausieren")
             onClicked: Jobs.pause(root.job.id, !root.paused)
         }
 
         IconButton {
             glyph: Util.glyphs.cancel
-            label: "Abbrechen"
+            label: Util.tr(I18n.strings, "Abbrechen")
             onClicked: Jobs.cancel(root.job.id)
         }
     }

@@ -35,13 +35,23 @@ Item {
         }
     }
 
+    IconButton {
+        id: settingsButton
+        x: root.compact ? (root.width - width) / 2 : root.padding
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: root.padding - 4
+        glyph: Util.glyphs.settings
+        label: Util.tr(I18n.strings, "Einstellungen")
+        onClicked: root.app.settingsOpen = true
+    }
+
     Flickable {
         id: scroll
 
         anchors.top: brand.bottom
         anchors.topMargin: 16
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: root.padding
+        anchors.bottom: settingsButton.top
+        anchors.bottomMargin: 8
         width: parent.width
         contentWidth: width
         contentHeight: column.height + 8

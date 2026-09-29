@@ -12,6 +12,7 @@ import uuid
 from PySide6.QtCore import QObject, Signal, Slot
 
 from core.fs import checked_name
+from core.i18n import tr
 
 
 def photo_date(path):
@@ -55,7 +56,7 @@ def plan(paths, find="", replace="", regex=False, template="{name}", start=1, ca
         try:
             pattern = re.compile(find)
         except re.error as error:
-            return [{"path": p, "old": os.path.basename(p), "new": os.path.basename(p), "error": f"Regex: {error}"} for p in paths]
+            return [{"path": p, "old": os.path.basename(p), "new": os.path.basename(p), "error": tr("Regex: {error}", error=error)} for p in paths]
     rows = []
     for index, path in enumerate(paths):
         old = os.path.basename(path)
@@ -82,14 +83,14 @@ def plan(paths, find="", replace="", regex=False, template="{name}", start=1, ca
         folder = os.path.dirname(row["path"])
         key = (folder, row["new"])
         if key in seen:
-            row["error"] = "Doppelter Name"
-            seen[key]["error"] = "Doppelter Name"
+            row["error"] = tr("Doppelter Name")
+            seen[key]["error"] = tr("Doppelter Name")
         seen[key] = row
     renamed = {row["path"] for row in rows}
     for row in rows:
         target = os.path.join(os.path.dirname(row["path"]), row["new"])
         if not row["error"] and row["new"] != row["old"] and os.path.lexists(target) and target not in renamed:
-            row["error"] = "Name ist schon vergeben"
+            row["error"] = tr("Name ist schon vergeben")
     return rows
 
 
@@ -98,7 +99,7 @@ def apply(rows):
     moves = [(row["path"], os.path.join(os.path.dirname(row["path"]), row["new"])) for row in rows
              if row["new"] != row["old"] and not row["error"]]
     if any(row["error"] for row in rows):
-        raise ValueError("Der Plan hat noch Fehler")
+        raise ValueError(tr("Der Plan hat noch Fehler"))
     parked = []
     try:
         for source, target in moves:
@@ -132,7 +133,7 @@ class Rename(QObject):
         def work():
             try:
                 steps = apply([dict(row) for row in rows])
-                self.done.emit(True, f"{len(steps)} umbenannt", [list(s) for s in steps])
+                self.done.emit(True, tr("{n} umbenannt", n=len(steps)), [list(s) for s in steps])
             except (OSError, ValueError) as error:
                 self.done.emit(False, str(error), [])
         threading.Thread(target=work, daemon=True).start()

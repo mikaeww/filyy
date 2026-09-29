@@ -10,6 +10,8 @@ import posixpath
 import tarfile
 import zipfile
 
+from core.i18n import tr
+
 ZIP = (".zip", ".jar", ".apk", ".war", ".xpi", ".mrpack")
 TAR = (".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz", ".tar.zst", ".tzst")
 _cache = {}
@@ -81,7 +83,7 @@ def listing(archive, inner, kind_of, natural_key):
     inner = inner.strip("/")
     all_members = members(archive)
     if inner and not all_members.get(inner, {}).get("dir"):
-        return {"path": f"{archive}/{inner}", "entries": [], "error": "Nicht im Archiv"}
+        return {"path": f"{archive}/{inner}", "entries": [], "error": tr("Nicht im Archiv")}
     entries = []
     for name, info in all_members.items():
         if posixpath.dirname(name) != inner:
@@ -100,9 +102,9 @@ def plan(paths):
     for path in paths:
         where = split(path)
         if not where:
-            raise ValueError(f"{os.path.basename(path)} liegt in keinem Archiv")
+            raise ValueError(tr("{name} liegt in keinem Archiv", name=os.path.basename(path)))
         if archive and where[0] != archive:
-            raise ValueError("Nur aus einem Archiv auf einmal")
+            raise ValueError(tr("Nur aus einem Archiv auf einmal"))
         archive = where[0]
         picked.append(where[1].strip("/"))
     all_members = members(archive)

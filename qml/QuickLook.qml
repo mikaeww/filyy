@@ -79,8 +79,8 @@ Sheet {
 
             Text {
                 width: parent.width
-                text: root.entry ? (root.entry.dir ? "Ordner" : Util.size(root.entry.size)) + "  ·  " + Files.mimeName(root.entry.path)
-                    + (root.kind === "pdf" && pdf.frameCount > 0 ? "  ·  Seite " + (root.page + 1) + " / " + pdf.frameCount : "") : ""
+                text: root.entry ? (root.entry.dir ? Util.tr(I18n.strings, "Ordner") : Util.size(root.entry.size)) + "  ·  " + Files.mimeName(root.entry.path)
+                    + (root.kind === "pdf" && pdf.frameCount > 0 ? "  ·  " + Util.tr(I18n.strings, "Seite {page} / {count}", { page: root.page + 1, count: pdf.frameCount }) : "") : ""
                 elide: Text.ElideRight
                 color: Theme.fgMuted
                 font.family: Theme.fontUi
@@ -155,7 +155,7 @@ Sheet {
 
             TextEdit {
                 id: code
-                text: root.showsText ? root.text.text + (root.text.truncated ? "\n\n… gekürzt, nur die ersten 256 KB" : "") : ""
+                text: root.showsText ? root.text.text + (root.text.truncated ? "\n\n" + Util.tr(I18n.strings, "… gekürzt, nur die ersten 256 KB") : "") : ""
                 readOnly: true
                 selectByMouse: true
                 color: Theme.fg
@@ -187,8 +187,8 @@ Sheet {
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: !root.entry ? "" : root.entry.dir ? Files.count(root.entry.path) + " Elemente"
-                    : "Keine Vorschau für diesen Dateityp"
+                text: !root.entry ? "" : root.entry.dir ? Util.tr(I18n.strings, "{n} Elemente", { n: Files.count(root.entry.path) })
+                    : Util.tr(I18n.strings, "Keine Vorschau für diesen Dateityp")
                 color: Theme.fgMuted
                 font.family: Theme.fontUi
                 font.pixelSize: 12
@@ -197,7 +197,7 @@ Sheet {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 visible: root.entry !== null
-                text: root.entry ? "Geändert " + Qt.formatDateTime(new Date(root.entry.mtime), "dd.MM.yyyy  HH:mm") : ""
+                text: root.entry ? Util.tr(I18n.strings, "Geändert {date}", { date: Qt.formatDateTime(new Date(root.entry.mtime), "dd.MM.yyyy  HH:mm") }) : ""
                 color: Theme.fgMuted
                 font.family: Theme.fontMono
                 font.pixelSize: 11

@@ -58,7 +58,7 @@ Item {
         IconButton {
             anchors.verticalCenter: parent.verticalCenter
             glyph: player.playbackState === MediaPlayer.PlayingState ? Util.glyphs.pause : Util.glyphs.play
-            label: "Abspielen"
+            label: Util.tr(I18n.strings, "Abspielen")
             onClicked: root.toggle()
         }
 

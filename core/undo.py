@@ -8,6 +8,8 @@ import threading
 
 from PySide6.QtCore import QObject, Property, Signal, Slot
 
+from core.i18n import tr
+
 LIMIT = 50
 
 
@@ -21,12 +23,12 @@ def revert(steps, trash, restore):
         elif kind in ("moved", "renamed"):
             source, target = step[1], step[2]
             if os.path.lexists(source):
-                raise FileExistsError(f"Am alten Ort liegt schon {os.path.basename(source)}")
+                raise FileExistsError(tr("Am alten Ort liegt schon {name}", name=os.path.basename(source)))
             os.makedirs(os.path.dirname(source), exist_ok=True)
             os.rename(target, source)
         elif kind == "trashed":
             if not step[2]:
-                raise OSError(f"{os.path.basename(step[1])} liegt in einem fremden Papierkorb")
+                raise OSError(tr("{name} liegt in einem fremden Papierkorb", name=os.path.basename(step[1])))
             restore(step[2])
         else:
             raise ValueError(f"Unbekannter Schritt {kind}")
@@ -62,9 +64,9 @@ class Undo(QObject):
         def work():
             try:
                 revert(steps, self._trash, self._restore)
-                self.done.emit(True, f"Rückgängig: {label}")
+                self.done.emit(True, tr("Rückgängig: {label}", label=tr(label)))
             except (OSError, ValueError) as error:
-                self.done.emit(False, f"{label} lässt sich nicht rückgängig machen: {error}")
+                self.done.emit(False, tr("{label} lässt sich nicht rückgängig machen: {error}", label=tr(label), error=error))
         threading.Thread(target=work, daemon=True).start()
 
     label = Property(str, lambda self: self._stack[-1][0] if self._stack else "", notify=changed)

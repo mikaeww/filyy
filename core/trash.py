@@ -10,6 +10,8 @@ import urllib.parse
 
 from PySide6.QtCore import QFile
 
+from core.i18n import tr
+
 HOME_TRASH = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "Trash")
 
 
@@ -27,7 +29,7 @@ def trash(path, trash_dir=HOME_TRASH):
     if os.lstat(path).st_dev != os.stat(files).st_dev:
         # ponytail: other filesystems use Qt's $topdir/.Trash; those items are not undoable from Filyy.
         if not QFile.moveToTrash(path):
-            raise OSError(f"Konnte {os.path.basename(path)} nicht in den Papierkorb legen")
+            raise OSError(tr("Konnte {name} nicht in den Papierkorb legen", name=os.path.basename(path)))
         return ""
     base = os.path.basename(path)
     name, number = base, 1
@@ -80,10 +82,10 @@ def restore(trashed, trash_dir=HOME_TRASH):
     name = os.path.basename(trashed)
     record = next((e for e in entries(trash_dir) if e["name"] == name), None)
     if not record or not record["original"]:
-        raise FileNotFoundError(f"Keine Herkunft für {name}")
+        raise FileNotFoundError(tr("Keine Herkunft für {name}", name=name))
     target = record["original"]
     if os.path.lexists(target):
-        raise FileExistsError(f"Am alten Ort liegt schon {os.path.basename(target)}")
+        raise FileExistsError(tr("Am alten Ort liegt schon {name}", name=os.path.basename(target)))
     os.makedirs(os.path.dirname(target), exist_ok=True)
     shutil.move(os.path.join(files, name), target)
     os.remove(os.path.join(info, name + ".trashinfo"))

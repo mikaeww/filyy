@@ -48,6 +48,7 @@ Window {
     property bool searchRegex: false
     property bool searchHidden: false
     property string searchState: ""
+    property bool settingsOpen: false
     property bool jumping: false
     property var jumpResults: []
     property int jumpIndex: 0
@@ -287,7 +288,7 @@ Window {
         searchFolder = pane.path
         searchRows = []
         searchIndex = -1
-        searchState = Search.ready() ? "" : "ripgrep (rg) ist nicht installiert"
+        searchState = Search.ready() ? "" : Util.tr(I18n.strings, "ripgrep (rg) ist nicht installiert")
         searchField.text = query ?? pane.filterText
         searching = true
         searchField.input.forceActiveFocus()
@@ -296,7 +297,7 @@ Window {
     function runSearch() {
         searchRows = []
         searchIndex = -1
-        searchState = searchField.text.trim() ? "Suche …" : ""
+        searchState = searchField.text.trim() ? Util.tr(I18n.strings, "Suche …") : ""
         searchId = Search.start(searchFolder, searchField.text, searchRegex, searchHidden)
     }
 
@@ -361,14 +362,14 @@ Window {
     function cut(paths) {
         if (paths.length) {
             Files.setClipboard(paths, true)
-            say(paths.length + " ausgeschnitten", false)
+            say(Util.tr(I18n.strings, "{n} ausgeschnitten", { n: paths.length }), false)
         }
     }
 
     function copy(paths) {
         if (paths.length) {
             Files.setClipboard(paths, false)
-            say(paths.length + " kopiert", false)
+            say(Util.tr(I18n.strings, "{n} kopiert", { n: paths.length }), false)
         }
     }
 
@@ -393,57 +394,57 @@ Window {
         const p = pane
         if (p.isTrash) {
             if (!entry)
-                return [{ label: "Papierkorb leeren", glyph: Util.glyphs.trash, danger: true, enabled: p.entries.length > 0, run: () => openSheet("empty") }]
+                return [{ label: Util.tr(I18n.strings, "Papierkorb leeren"), glyph: Util.glyphs.trash, danger: true, enabled: p.entries.length > 0, run: () => openSheet("empty") }]
             return [
-                { label: "Wiederherstellen", glyph: Util.glyphs.restore, hint: "Enter", run: () => Files.restore(p.targets) },
-                { label: "Herkunft öffnen", glyph: Util.glyphs.open, enabled: p.targets.length === 1 && entry.original !== "", run: () => p.navigate(entry.original.slice(0, entry.original.lastIndexOf("/")) || "/") },
+                { label: Util.tr(I18n.strings, "Wiederherstellen"), glyph: Util.glyphs.restore, hint: "Enter", run: () => Files.restore(p.targets) },
+                { label: Util.tr(I18n.strings, "Herkunft öffnen"), glyph: Util.glyphs.open, enabled: p.targets.length === 1 && entry.original !== "", run: () => p.navigate(entry.original.slice(0, entry.original.lastIndexOf("/")) || "/") },
                 { separator: true },
-                { label: "Endgültig löschen", glyph: Util.glyphs.trash, hint: "Entf", danger: true, run: () => openSheet("purge") }
+                { label: Util.tr(I18n.strings, "Endgültig löschen"), glyph: Util.glyphs.trash, hint: Util.tr(I18n.strings, "Entf"), danger: true, run: () => openSheet("purge") }
             ]
         }
         if (p.inArchive) {
             const archiveFile = archiveOf(p.path)
             if (!entry)
-                return [{ label: "Alles entpacken", glyph: Util.glyphs.extract, run: () => Files.extractAll(archiveFile) }]
+                return [{ label: Util.tr(I18n.strings, "Alles entpacken"), glyph: Util.glyphs.extract, run: () => Files.extractAll(archiveFile) }]
             const other = split && tab ? (p === tab.first ? tab.secondPane : tab.first) : null
             return [
-                { label: "Öffnen", glyph: Util.glyphs.open, hint: "Enter", enabled: p.targets.length === 1, run: () => p.activate(entry) },
+                { label: Util.tr(I18n.strings, "Öffnen"), glyph: Util.glyphs.open, hint: "Enter", enabled: p.targets.length === 1, run: () => p.activate(entry) },
                 { separator: true },
-                { label: "Neben das Archiv entpacken", glyph: Util.glyphs.extract, run: () => Files.extract(p.targets, Files.archiveFolder(p.path)) },
-                { label: "In andere Seite entpacken", glyph: Util.glyphs.split, enabled: other !== null && !other.readOnly, run: () => Files.extract(p.targets, other.path) }
+                { label: Util.tr(I18n.strings, "Neben das Archiv entpacken"), glyph: Util.glyphs.extract, run: () => Files.extract(p.targets, Files.archiveFolder(p.path)) },
+                { label: Util.tr(I18n.strings, "In andere Seite entpacken"), glyph: Util.glyphs.split, enabled: other !== null && !other.readOnly, run: () => Files.extract(p.targets, other.path) }
             ]
         }
         if (!entry) {
             return [
-                { label: "Neuer Ordner", glyph: Util.glyphs.newFolder, hint: "Strg+Shift+N", run: () => openSheet("mkdir") },
-                { label: "Einfügen", glyph: Util.glyphs.paste, hint: "Strg+V", enabled: has, run: () => Files.paste(p.path) },
-                { label: "Terminal hier", glyph: Util.glyphs.terminal, hint: "Shift+F4", run: () => Files.terminal(p.path) },
-                { label: Undo.label ? "Rückgängig: " + Undo.label : "Rückgängig", glyph: Util.glyphs.undo, hint: "Strg+Z", enabled: Undo.label !== "", run: () => Undo.undo() },
+                { label: Util.tr(I18n.strings, "Neuer Ordner"), glyph: Util.glyphs.newFolder, hint: Util.tr(I18n.strings, "Strg+Shift+N"), run: () => openSheet("mkdir") },
+                { label: Util.tr(I18n.strings, "Einfügen"), glyph: Util.glyphs.paste, hint: Util.tr(I18n.strings, "Strg+V"), enabled: has, run: () => Files.paste(p.path) },
+                { label: Util.tr(I18n.strings, "Terminal hier"), glyph: Util.glyphs.terminal, hint: "Shift+F4", run: () => Files.terminal(p.path) },
+                { label: Undo.label ? Util.tr(I18n.strings, "Rückgängig: {label}", { label: Util.tr(I18n.strings, Undo.label) }) : Util.tr(I18n.strings, "Rückgängig"), glyph: Util.glyphs.undo, hint: Util.tr(I18n.strings, "Strg+Z"), enabled: Undo.label !== "", run: () => Undo.undo() },
                 { separator: true },
-                { label: p.showHidden ? "Versteckte ausblenden" : "Versteckte zeigen", glyph: p.showHidden ? Util.glyphs.eyeOff : Util.glyphs.eye, hint: "Strg+H", run: () => p.toggleHidden() },
-                { label: p.view === "list" ? "Als Raster" : "Als Liste", glyph: p.view === "list" ? Util.glyphs.grid : Util.glyphs.list, hint: p.view === "list" ? "Strg+2" : "Strg+1", run: () => p.view = p.view === "list" ? "grid" : "list" },
-                { label: split ? "Teilung schließen" : "Geteilte Ansicht", glyph: Util.glyphs.split, hint: "F3", run: () => toggleSplit() },
-                { label: "Neu laden", glyph: Util.glyphs.refresh, hint: "F5", run: () => p.reload() }
+                { label: p.showHidden ? Util.tr(I18n.strings, "Versteckte ausblenden") : Util.tr(I18n.strings, "Versteckte zeigen"), glyph: p.showHidden ? Util.glyphs.eyeOff : Util.glyphs.eye, hint: Util.tr(I18n.strings, "Strg+H"), run: () => p.toggleHidden() },
+                { label: p.view === "list" ? Util.tr(I18n.strings, "Als Raster") : Util.tr(I18n.strings, "Als Liste"), glyph: p.view === "list" ? Util.glyphs.grid : Util.glyphs.list, hint: p.view === "list" ? Util.tr(I18n.strings, "Strg+2") : Util.tr(I18n.strings, "Strg+1"), run: () => p.view = p.view === "list" ? "grid" : "list" },
+                { label: split ? Util.tr(I18n.strings, "Teilung schließen") : Util.tr(I18n.strings, "Geteilte Ansicht"), glyph: Util.glyphs.split, hint: "F3", run: () => toggleSplit() },
+                { label: Util.tr(I18n.strings, "Neu laden"), glyph: Util.glyphs.refresh, hint: "F5", run: () => p.reload() }
             ]
         }
         const several = p.targets.length > 1
         const packed = !entry.dir && Files.isArchive(entry.path)
         return [
-            { label: packed ? "Durchsuchen" : "Öffnen", glyph: Util.glyphs.open, hint: "Enter", enabled: !several, run: () => p.activate(entry) },
-            { label: "Hier entpacken", glyph: Util.glyphs.extract, visible: packed, enabled: !several, run: () => Files.extractAll(entry.path) },
-            { label: "Vorschau", glyph: Util.glyphs.preview, hint: "Leertaste", enabled: !several, run: () => quickLook.show(p.shown, p.cursor) },
-            { label: "Öffnen mit …", glyph: Util.glyphs.apps, enabled: !several && !entry.dir, run: () => openWith(entry.path) },
-            { label: "In neuem Tab", glyph: Util.glyphs.tab, hint: "Mittelklick", enabled: entry.dir && !several, run: () => newTab(entry.path) },
-            { label: "Im Terminal öffnen", glyph: Util.glyphs.terminal, enabled: entry.dir && !several, run: () => Files.terminal(entry.path) },
+            { label: packed ? Util.tr(I18n.strings, "Durchsuchen") : Util.tr(I18n.strings, "Öffnen"), glyph: Util.glyphs.open, hint: "Enter", enabled: !several, run: () => p.activate(entry) },
+            { label: Util.tr(I18n.strings, "Hier entpacken"), glyph: Util.glyphs.extract, visible: packed, enabled: !several, run: () => Files.extractAll(entry.path) },
+            { label: Util.tr(I18n.strings, "Vorschau"), glyph: Util.glyphs.preview, hint: Util.tr(I18n.strings, "Leertaste"), enabled: !several, run: () => quickLook.show(p.shown, p.cursor) },
+            { label: Util.tr(I18n.strings, "Öffnen mit …"), glyph: Util.glyphs.apps, enabled: !several && !entry.dir, run: () => openWith(entry.path) },
+            { label: Util.tr(I18n.strings, "In neuem Tab"), glyph: Util.glyphs.tab, hint: Util.tr(I18n.strings, "Mittelklick"), enabled: entry.dir && !several, run: () => newTab(entry.path) },
+            { label: Util.tr(I18n.strings, "Im Terminal öffnen"), glyph: Util.glyphs.terminal, enabled: entry.dir && !several, run: () => Files.terminal(entry.path) },
             { separator: true },
-            { label: "Ausschneiden", glyph: Util.glyphs.cut, hint: "Strg+X", run: () => cut(p.targets) },
-            { label: "Kopieren", glyph: Util.glyphs.copy, hint: "Strg+C", run: () => copy(p.targets) },
-            { label: "Hier hinein einfügen", glyph: Util.glyphs.paste, enabled: has && entry.dir && !several, run: () => Files.paste(entry.path) },
-            { label: "Duplizieren", glyph: Util.glyphs.duplicate, hint: "Strg+D", run: () => Files.duplicate(p.targets) },
-            { label: several ? "Mehrere umbenennen …" : "Umbenennen", glyph: several ? Util.glyphs.batch : Util.glyphs.rename, hint: "F2", run: () => openSheet("rename") },
-            { label: "Pfad kopieren", glyph: Util.glyphs.link, hint: "Strg+Shift+C", run: () => Files.copyPaths(p.targets) },
+            { label: Util.tr(I18n.strings, "Ausschneiden"), glyph: Util.glyphs.cut, hint: Util.tr(I18n.strings, "Strg+X"), run: () => cut(p.targets) },
+            { label: Util.tr(I18n.strings, "Kopieren"), glyph: Util.glyphs.copy, hint: Util.tr(I18n.strings, "Strg+C"), run: () => copy(p.targets) },
+            { label: Util.tr(I18n.strings, "Hier hinein einfügen"), glyph: Util.glyphs.paste, enabled: has && entry.dir && !several, run: () => Files.paste(entry.path) },
+            { label: Util.tr(I18n.strings, "Duplizieren"), glyph: Util.glyphs.duplicate, hint: Util.tr(I18n.strings, "Strg+D"), run: () => Files.duplicate(p.targets) },
+            { label: several ? Util.tr(I18n.strings, "Mehrere umbenennen …") : Util.tr(I18n.strings, "Umbenennen"), glyph: several ? Util.glyphs.batch : Util.glyphs.rename, hint: "F2", run: () => openSheet("rename") },
+            { label: Util.tr(I18n.strings, "Pfad kopieren"), glyph: Util.glyphs.link, hint: Util.tr(I18n.strings, "Strg+Shift+C"), run: () => Files.copyPaths(p.targets) },
             { separator: true },
-            { label: "In den Papierkorb", glyph: Util.glyphs.trash, hint: "Entf", danger: true, run: () => openSheet("trash") }
+            { label: Util.tr(I18n.strings, "In den Papierkorb"), glyph: Util.glyphs.trash, hint: Util.tr(I18n.strings, "Entf"), danger: true, run: () => openSheet("trash") }
         ]
     }
 
@@ -508,8 +509,16 @@ Window {
 
         function onFinished(id, total, truncated) {
             if (id === win.searchId)
-                win.searchState = !total ? (searchField.text.trim() ? "Nichts gefunden" : "")
-                    : total + " Treffer" + (truncated ? ", bei " + total + " abgebrochen" : "")
+                win.searchState = !total ? (searchField.text.trim() ? Util.tr(I18n.strings, "Nichts gefunden") : "")
+                    : Util.tr(I18n.strings, truncated ? "{n} Treffer, bei {n} abgebrochen" : "{n} Treffer", { n: total })
+        }
+    }
+
+    Connections {
+        target: I18n
+
+        function onChanged() {
+            win.places = Files.places()
         }
     }
 
@@ -884,7 +893,7 @@ Window {
 
         readonly property bool asksName: win.sheet === "mkdir" || win.sheet === "rename"
         readonly property string names: win.sheetTargets.slice(0, 4).map(p => p.slice(p.lastIndexOf("/") + 1)).join(", ")
-            + (win.sheetTargets.length > 4 ? " und " + (win.sheetTargets.length - 4) + " weitere" : "")
+            + (win.sheetTargets.length > 4 ? " " + Util.tr(I18n.strings, "und {n} weitere", { n: win.sheetTargets.length - 4 }) : "")
 
         open: win.sheet !== ""
         onDismissed: win.closeSheet()
@@ -892,8 +901,8 @@ Window {
 
         Text {
             width: parent.width
-            text: ({ mkdir: "Neuer Ordner", rename: "Umbenennen", trash: "In den Papierkorb legen?", delete: "Endgültig löschen?",
-                     purge: "Endgültig löschen?", empty: "Papierkorb leeren?" })[win.sheet] ?? ""
+            text: ({ mkdir: Util.tr(I18n.strings, "Neuer Ordner"), rename: Util.tr(I18n.strings, "Umbenennen"), trash: Util.tr(I18n.strings, "In den Papierkorb legen?"), delete: Util.tr(I18n.strings, "Endgültig löschen?"),
+                     purge: Util.tr(I18n.strings, "Endgültig löschen?"), empty: Util.tr(I18n.strings, "Papierkorb leeren?") })[win.sheet] ?? ""
             color: Theme.fg
             font.family: Theme.fontUi
             font.pixelSize: 18
@@ -904,10 +913,10 @@ Window {
             width: parent.width
             visible: !nameSheet.asksName
             text: win.sheet === "empty"
-                ? "Alle " + win.sheetTargets.length + " Elemente im Papierkorb werden gelöscht. Das lässt sich nicht rückgängig machen."
+                ? Util.tr(I18n.strings, "Alle {n} Elemente im Papierkorb werden gelöscht. Das lässt sich nicht rückgängig machen.", { n: win.sheetTargets.length })
                 : win.sheet === "delete" || win.sheet === "purge"
-                ? nameSheet.names + " wird sofort gelöscht, ohne Papierkorb. Das lässt sich nicht rückgängig machen."
-                : nameSheet.names + " landet im Papierkorb und lässt sich von dort zurückholen."
+                ? Util.tr(I18n.strings, "{names} wird sofort gelöscht, ohne Papierkorb. Das lässt sich nicht rückgängig machen.", { names: nameSheet.names })
+                : Util.tr(I18n.strings, "{names} landet im Papierkorb und lässt sich von dort zurückholen.", { names: nameSheet.names })
             wrapMode: Text.Wrap
             color: Theme.fgMuted
             font.family: Theme.fontUi
@@ -919,7 +928,7 @@ Window {
             id: sheetField
             visible: nameSheet.asksName
             width: parent.width
-            placeholder: "Name …"
+            placeholder: Util.tr(I18n.strings, "Name …")
             onKeyPressed: event => {
                 if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) win.confirmSheet()
                 else if (event.key === Qt.Key_Escape) win.closeSheet()
@@ -932,12 +941,50 @@ Window {
             anchors.right: parent.right
             spacing: 8
 
-            TextButton { label: "Abbrechen"; onClicked: win.closeSheet() }
+            TextButton { label: Util.tr(I18n.strings, "Abbrechen"); onClicked: win.closeSheet() }
             TextButton {
-                label: ({ mkdir: "Erstellen", rename: "Umbenennen", trash: "In den Papierkorb", delete: "Löschen", purge: "Löschen", empty: "Leeren" })[win.sheet] ?? "OK"
+                label: ({ mkdir: Util.tr(I18n.strings, "Erstellen"), rename: Util.tr(I18n.strings, "Umbenennen"), trash: Util.tr(I18n.strings, "In den Papierkorb"), delete: Util.tr(I18n.strings, "Löschen"), purge: Util.tr(I18n.strings, "Löschen"), empty: Util.tr(I18n.strings, "Leeren") })[win.sheet] ?? "OK"
                 primary: !danger
                 danger: ["delete", "purge", "empty"].includes(win.sheet)
                 onClicked: win.confirmSheet()
+            }
+        }
+    }
+
+    Sheet {
+        id: settingsSheet
+
+        open: win.settingsOpen
+        cardWidth: 400
+        onDismissed: {
+            win.settingsOpen = false
+            if (win.pane)
+                win.pane.focusList()
+        }
+
+        Text {
+            text: Util.tr(I18n.strings, "Einstellungen")
+            color: Theme.fg
+            font.family: Theme.fontUi
+            font.pixelSize: 18
+            font.weight: Font.DemiBold
+        }
+
+        SectionLabel { text: Util.tr(I18n.strings, "Sprache") }
+
+        Row {
+            spacing: 8
+
+            // Each language names itself, so it can be found whichever one is active.
+            Repeater {
+                model: [{ key: "en", label: "English" }, { key: "de", label: "Deutsch" }]
+
+                Chip {
+                    required property var modelData
+                    label: modelData.label
+                    active: I18n.lang === modelData.key
+                    onClicked: I18n.setLang(modelData.key)
+                }
             }
         }
     }
@@ -956,7 +1003,7 @@ Window {
         onAccepted: win.applyBatchRename()
 
         Text {
-            text: win.renameTargets.length + " Elemente umbenennen"
+            text: Util.tr(I18n.strings, "{n} Elemente umbenennen", { n: win.renameTargets.length })
             color: Theme.fg
             font.family: Theme.fontUi
             font.pixelSize: 18
@@ -970,7 +1017,7 @@ Window {
             Field {
                 id: findField
                 width: (parent.width - regexChip.width - 16) / 2
-                placeholder: "Suchen"
+                placeholder: Util.tr(I18n.strings, "Suchen")
                 onTextChanged: win.setRenameOption("find", text)
                 onKeyPressed: event => { if (event.key === Qt.Key_Escape) { win.closeBatchRename(); event.accepted = true } }
             }
@@ -978,7 +1025,7 @@ Window {
             Field {
                 id: replaceField
                 width: findField.width
-                placeholder: "Ersetzen durch"
+                placeholder: Util.tr(I18n.strings, "Ersetzen durch")
                 onTextChanged: win.setRenameOption("replace", text)
             }
 
@@ -999,7 +1046,7 @@ Window {
                 id: templateField
                 width: parent.width - startField.width - 8
                 mono: true
-                placeholder: "Vorlage, z. B. {date}-{name}-{n}"
+                placeholder: Util.tr(I18n.strings, "Vorlage, z. B. {date}-{name}-{n}")
                 text: "{name}"
                 onTextChanged: win.setRenameOption("template", text)
             }
@@ -1008,7 +1055,7 @@ Window {
                 id: startField
                 width: 110
                 mono: true
-                placeholder: "Nummer ab"
+                placeholder: Util.tr(I18n.strings, "Nummer ab")
                 text: "1"
                 input.validator: IntValidator { bottom: 0; top: 99999 }
                 onTextChanged: win.setRenameOption("start", parseInt(text) || 1)
@@ -1018,9 +1065,9 @@ Window {
         Row {
             spacing: 6
 
-            SectionLabel { text: "Schreibweise"; anchors.verticalCenter: parent.verticalCenter; rightPadding: 6 }
+            SectionLabel { text: Util.tr(I18n.strings, "Schreibweise"); anchors.verticalCenter: parent.verticalCenter; rightPadding: 6 }
             Repeater {
-                model: [{ key: "", label: "unverändert" }, { key: "lower", label: "klein" }, { key: "upper", label: "GROSS" }, { key: "kebab", label: "kebab-case" }]
+                model: [{ key: "", label: Util.tr(I18n.strings, "unverändert") }, { key: "lower", label: Util.tr(I18n.strings, "klein") }, { key: "upper", label: Util.tr(I18n.strings, "GROSS") }, { key: "kebab", label: "kebab-case" }]
                 Chip {
                     required property var modelData
                     label: modelData.label
@@ -1032,7 +1079,7 @@ Window {
 
         Text {
             width: parent.width
-            text: "{name} Name  ·  {n} Nummer  ·  {date} Aufnahme- oder Änderungsdatum  ·  {ext} Endung"
+            text: Util.tr(I18n.strings, "{name} Name  ·  {n} Nummer  ·  {date} Aufnahme- oder Änderungsdatum  ·  {ext} Endung")
             color: Theme.fgMuted
             font.family: Theme.fontMono
             font.pixelSize: 10
@@ -1099,10 +1146,10 @@ Window {
             anchors.right: parent.right
             spacing: 8
 
-            TextButton { label: "Abbrechen"; onClicked: win.closeBatchRename() }
+            TextButton { label: Util.tr(I18n.strings, "Abbrechen"); onClicked: win.closeBatchRename() }
             TextButton {
-                label: win.renameErrors ? win.renameErrors + " Konflikt" + (win.renameErrors === 1 ? "" : "e")
-                    : win.renameChanges + " umbenennen"
+                label: win.renameErrors ? Util.tr(I18n.strings, win.renameErrors === 1 ? "{n} Konflikt" : "{n} Konflikte", { n: win.renameErrors })
+                    : Util.tr(I18n.strings, "{n} umbenennen", { n: win.renameChanges })
                 primary: true
                 opacity: win.renameErrors || !win.renameChanges ? 0.45 : 1
                 onClicked: win.applyBatchRename()
@@ -1119,7 +1166,7 @@ Window {
 
         Text {
             width: parent.width
-            text: "„" + win.openWithFile.slice(win.openWithFile.lastIndexOf("/") + 1) + "“ öffnen mit"
+            text: Util.tr(I18n.strings, "„{file}“ öffnen mit", { file: win.openWithFile.slice(win.openWithFile.lastIndexOf("/") + 1) })
             elide: Text.ElideMiddle
             color: Theme.fg
             font.family: Theme.fontUi
@@ -1131,7 +1178,7 @@ Window {
             id: openWithField
             width: parent.width
             glyph: Util.glyphs.search
-            placeholder: "App suchen …"
+            placeholder: Util.tr(I18n.strings, "App suchen …")
             onTextChanged: win.filterOpenWith(text)
             onKeyPressed: event => {
                 const count = win.openWithApps.length
@@ -1194,7 +1241,7 @@ Window {
                     anchors.right: parent.right
                     anchors.rightMargin: 12
                     anchors.verticalCenter: parent.verticalCenter
-                    text: appRow.modelData.default ? "Standard" : ""
+                    text: appRow.modelData.default ? Util.tr(I18n.strings, "Standard") : ""
                     color: Theme.fgMuted
                     font.family: Theme.fontMono
                     font.pixelSize: 10
@@ -1212,7 +1259,7 @@ Window {
 
         Text {
             visible: win.openWithApps.length === 0
-            text: "Keine passende App gefunden"
+            text: Util.tr(I18n.strings, "Keine passende App gefunden")
             color: Theme.fgMuted
             font.family: Theme.fontUi
             font.pixelSize: 12
@@ -1222,7 +1269,7 @@ Window {
             width: parent.width
 
             Chip {
-                label: "Als Standard für diesen Dateityp merken"
+                label: Util.tr(I18n.strings, "Als Standard für diesen Dateityp merken")
                 active: win.openWithDefault
                 onClicked: win.openWithDefault = !win.openWithDefault
             }
@@ -1254,7 +1301,7 @@ Window {
                 width: parent.width - regexToggle.width - hiddenToggle.width - 16
                 height: 42
                 glyph: Util.glyphs.textSearch
-                placeholder: "In Dateien suchen …"
+                placeholder: Util.tr(I18n.strings, "In Dateien suchen …")
                 input.font.pixelSize: 15
                 onTextChanged: searchDelay.restart()
                 onKeyPressed: event => {
@@ -1278,7 +1325,7 @@ Window {
             Chip {
                 id: hiddenToggle
                 anchors.verticalCenter: parent.verticalCenter
-                label: "Versteckte"
+                label: Util.tr(I18n.strings, "Versteckte")
                 active: win.searchHidden
                 onClicked: { win.searchHidden = !win.searchHidden; win.runSearch() }
             }
@@ -1286,7 +1333,7 @@ Window {
 
         Text {
             width: parent.width
-            text: "in " + win.searchFolder.replace(win.home, "~") + (win.searchState ? "  ·  " + win.searchState : "")
+            text: Util.tr(I18n.strings, "in {folder}", { folder: win.searchFolder.replace(win.home, "~") }) + (win.searchState ? "  ·  " + win.searchState : "")
             elide: Text.ElideMiddle
             color: Theme.fgMuted
             font.family: Theme.fontUi
@@ -1389,7 +1436,7 @@ Window {
         }
 
         Text {
-            text: "↑ ↓  Treffer     Enter  Datei zeigen     Strg+Enter  Öffnen"
+            text: Util.tr(I18n.strings, "↑ ↓  Treffer     Enter  Datei zeigen     Strg+Enter  Öffnen")
             color: Theme.fgMuted
             font.family: Theme.fontUi
             font.pixelSize: 11
@@ -1410,7 +1457,7 @@ Window {
             width: parent.width
             height: 42
             glyph: Util.glyphs.jump
-            placeholder: "Zu Ordner springen …"
+            placeholder: Util.tr(I18n.strings, "Zu Ordner springen …")
             input.font.pixelSize: 15
 
             onTextChanged: {
@@ -1502,7 +1549,7 @@ Window {
         }
 
         Text {
-            text: win.jumpResults.length ? "↑ ↓  Auswählen     Enter  Springen     Strg+Enter  Neuer Tab" : "Kein passender Ordner"
+            text: win.jumpResults.length ? Util.tr(I18n.strings, "↑ ↓  Auswählen     Enter  Springen     Strg+Enter  Neuer Tab") : Util.tr(I18n.strings, "Kein passender Ordner")
             color: Theme.fgMuted
             font.family: Theme.fontUi
             font.pixelSize: 11
@@ -1522,7 +1569,7 @@ Window {
 
         Text {
             width: parent.width
-            text: "„" + (conflictSheet.target.name ?? "") + "“ gibt es dort schon"
+            text: Util.tr(I18n.strings, "„{name}“ gibt es dort schon", { name: conflictSheet.target.name ?? "" })
             wrapMode: Text.Wrap
             color: Theme.fg
             font.family: Theme.fontUi
@@ -1531,7 +1578,7 @@ Window {
         }
 
         Repeater {
-            model: [{ label: "Neu", info: conflictSheet.source }, { label: "Vorhanden", info: conflictSheet.target }]
+            model: [{ label: Util.tr(I18n.strings, "Neu"), info: conflictSheet.source }, { label: Util.tr(I18n.strings, "Vorhanden"), info: conflictSheet.target }]
 
             Row {
                 required property var modelData
@@ -1540,7 +1587,7 @@ Window {
                 SectionLabel { width: 90; text: parent.modelData.label; anchors.verticalCenter: parent.verticalCenter }
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: (parent.modelData.info.dir ? "Ordner" : Util.size(parent.modelData.info.size ?? 0))
+                    text: (parent.modelData.info.dir ? Util.tr(I18n.strings, "Ordner") : Util.size(parent.modelData.info.size ?? 0))
                         + "  ·  " + Qt.formatDateTime(new Date(parent.modelData.info.mtime ?? 0), "dd.MM.yyyy  HH:mm")
                     color: Theme.fgMuted
                     font.family: Theme.fontMono
@@ -1583,7 +1630,7 @@ Window {
 
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "Für alle weiteren Konflikte"
+                    text: Util.tr(I18n.strings, "Für alle weiteren Konflikte")
                     color: Theme.fg
                     font.family: Theme.fontUi
                     font.pixelSize: 12
@@ -1595,9 +1642,9 @@ Window {
             anchors.right: parent.right
             spacing: 8
 
-            TextButton { label: "Überspringen"; onClicked: win.answerConflict("skip") }
-            TextButton { label: "Ersetzen"; onClicked: win.answerConflict("replace") }
-            TextButton { label: "Beide behalten"; primary: true; onClicked: win.answerConflict("keep") }
+            TextButton { label: Util.tr(I18n.strings, "Überspringen"); onClicked: win.answerConflict("skip") }
+            TextButton { label: Util.tr(I18n.strings, "Ersetzen"); onClicked: win.answerConflict("replace") }
+            TextButton { label: Util.tr(I18n.strings, "Beide behalten"); primary: true; onClicked: win.answerConflict("keep") }
         }
     }
 }

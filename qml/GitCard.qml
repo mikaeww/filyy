@@ -87,7 +87,7 @@ Rectangle {
 
         Text {
             width: parent.width
-            text: root.info.subject || "Noch kein Commit"
+            text: root.info.subject || Util.tr(I18n.strings, "Noch kein Commit")
             elide: Text.ElideRight
             color: Theme.fg
             font.family: Theme.fontUi
@@ -97,7 +97,7 @@ Rectangle {
         Text {
             width: parent.width
             visible: (root.info.hash ?? "") !== ""
-            text: (root.info.hash ?? "") + "  ·  " + Util.ago(root.info.time ?? 0) + "  ·  " + (root.info.author ?? "")
+            text: (root.info.hash ?? "") + "  ·  " + Util.ago(I18n.strings, root.info.time ?? 0) + "  ·  " + (root.info.author ?? "")
             elide: Text.ElideRight
             color: Theme.fgMuted
             font.family: Theme.fontMono
@@ -106,7 +106,8 @@ Rectangle {
 
         Text {
             visible: (root.info.changes ?? -1) >= 0
-            text: root.info.changes === 0 ? "Alles committet" : root.info.changes + (root.info.changes === 1 ? " offene Änderung" : " offene Änderungen")
+            text: root.info.changes === 0 ? Util.tr(I18n.strings, "Alles committet")
+                : Util.tr(I18n.strings, root.info.changes === 1 ? "{n} offene Änderung" : "{n} offene Änderungen", { n: root.info.changes })
             color: root.info.changes === 0 ? Theme.fgMuted : Theme.warn
             font.family: Theme.fontUi
             font.pixelSize: 11

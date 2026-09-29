@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core import trash as trashcan
 from core.jobs import CHUNK, KEEP_BOTH, REPLACE, SKIP, Job
-from core import archive
+from core import archive, i18n
 from core.apps import all_apps, handlers
 from core.gitinfo import info as git_info
 from core.jump import fuzzy, rank
@@ -23,6 +23,8 @@ from core.theme import preset_colors, shell_theme
 
 
 def main():
+    # The checks below compare German messages; English has its own test in translations().
+    i18n.current = "de"
     with tempfile.TemporaryDirectory() as tmp:
         (Path(tmp) / "b10.txt").write_text("x")
         (Path(tmp) / "b9.txt").write_text("x")
@@ -69,6 +71,7 @@ def main():
         archives(Path(tmp))
     with tempfile.TemporaryDirectory() as tmp:
         prefs(Path(tmp))
+    translations()
     print("ok")
 
 
@@ -323,6 +326,58 @@ def prefs(root):
     first.set("session", session)
     again = Prefs(path)
     assert again.get("view") == "grid" and again.get("hidden") is True and again.get("session") == session
+
+
+def tr_arguments(text):
+    """The first argument of every Util.tr(I18n.strings, ...) call, parsed with quotes and brackets in mind."""
+    marker = "Util.tr(I18n.strings, "
+    at = text.find(marker)
+    while at >= 0:
+        i, depth, quote = at + len(marker), 0, None
+        start = i
+        while i < len(text):
+            ch = text[i]
+            if quote:
+                if ch == "\\":
+                    i += 1
+                elif ch == quote:
+                    quote = None
+            elif ch in "\"'":
+                quote = ch
+            elif ch in "([{":
+                depth += 1
+            elif ch in ")]}":
+                if depth == 0:
+                    break
+                depth -= 1
+            elif ch == "," and depth == 0:
+                break
+            i += 1
+        yield text[start:i]
+        at = text.find(marker, i)
+
+
+def translations():
+    import re
+    root = Path(__file__).resolve().parent.parent
+    keys = set()
+    for qml in (root / "qml").glob("*.qml"):
+        for argument in tr_arguments(qml.read_text()):
+            keys.update(re.findall(r'"((?:[^"\\]|\\.)*)"', argument))
+    keys.update(re.findall(r'\[\d+, "([^"]+)"', (root / "qml" / "Util.js").read_text()))
+    for py in (root / "core").glob("*.py"):
+        keys.update(re.findall(r'\btr\(\s*"([^"]+)"', py.read_text()))
+    # Undo labels are stored in German and translated when shown.
+    keys.update(["Neuer Ordner", "Umbenennen", "Papierkorb", "Wiederherstellen", "Kopieren", "Verschieben",
+                 "Duplizieren", "Entpacken"])
+    keys.discard("list")
+    missing = sorted(k for k in keys if k not in i18n.EN and re.search(r"[A-Za-zÄÖÜäöüß]", k))
+    assert not missing, f"no English for: {missing}"
+    i18n.current = "en"
+    assert i18n.tr("{n} Ordner", n=1) == "1 folder" and i18n.tr("{n} Ordner", n=3) == "3 folders"
+    assert i18n.tr("Nicht gefunden: {name}", name="a.txt") == "Not found: a.txt"
+    i18n.current = "de"
+    assert i18n.tr("{n} Ordner", n=1) == "1 Ordner"
 
 
 if __name__ == "__main__":

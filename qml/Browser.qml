@@ -48,7 +48,7 @@ FocusScope {
     readonly property var pickedPaths: Object.keys(picked)
     readonly property var targets: pickedPaths.length ? pickedPaths : (current ? [current.path] : [])
     readonly property Flickable activeView: isTrash ? graves : view === "grid" ? grid : view === "usage" ? usageList : list
-    readonly property string title: isTrash ? "Papierkorb" : path === app.home ? "Home" : path.slice(path.lastIndexOf("/") + 1) || "/"
+    readonly property string title: isTrash ? Util.tr(I18n.strings, "Papierkorb") : path === app.home ? Util.tr(I18n.strings, "Home") : path.slice(path.lastIndexOf("/") + 1) || "/"
 
     Component.onCompleted: navigate(startPath)
 
@@ -387,9 +387,9 @@ FocusScope {
             anchors.verticalCenter: parent.verticalCenter
             spacing: 2
 
-            IconButton { glyph: Util.glyphs.back; label: "Zurück"; enabled: root.history.index > 0; onClicked: root.stepHistory(-1) }
-            IconButton { glyph: Util.glyphs.forward; label: "Vor"; enabled: root.history.index < root.history.list.length - 1; onClicked: root.stepHistory(1) }
-            IconButton { glyph: Util.glyphs.up; label: "Hoch"; enabled: root.path !== "/"; onClicked: root.up() }
+            IconButton { glyph: Util.glyphs.back; label: Util.tr(I18n.strings, "Zurück"); enabled: root.history.index > 0; onClicked: root.stepHistory(-1) }
+            IconButton { glyph: Util.glyphs.forward; label: Util.tr(I18n.strings, "Vor"); enabled: root.history.index < root.history.list.length - 1; onClicked: root.stepHistory(1) }
+            IconButton { glyph: Util.glyphs.up; label: Util.tr(I18n.strings, "Hoch"); enabled: root.path !== "/"; onClicked: root.up() }
         }
 
         Rectangle {
@@ -422,7 +422,7 @@ FocusScope {
                 spacing: 2
 
                 Repeater {
-                    model: root.isTrash ? [{ name: "Papierkorb", path: root.path }] : Util.crumbs(root.path, root.app.home)
+                    model: root.isTrash ? [{ name: Util.tr(I18n.strings, "Papierkorb"), path: root.path }] : Util.crumbs(root.path, root.app.home)
 
                     Row {
                         id: crumb
@@ -492,7 +492,7 @@ FocusScope {
                 font.family: Theme.fontMono
                 font.pixelSize: 13
                 clip: true
-                Accessible.name: "Pfad"
+                Accessible.name: Util.tr(I18n.strings, "Pfad")
 
                 onActiveFocusChanged: if (!activeFocus) root.editingPath = false
                 Keys.onReturnPressed: { root.navigate(text); root.focusList() }
@@ -516,7 +516,7 @@ FocusScope {
 
                 width: root.width < 760 ? 130 : 210
                 glyph: Util.glyphs.search
-                placeholder: "Filtern …"
+                placeholder: Util.tr(I18n.strings, "Filtern …")
 
                 onTextChanged: {
                     root.cursor = 0
@@ -539,13 +539,13 @@ FocusScope {
 
             Item { width: 8; height: 1 }
 
-            IconButton { visible: root.width >= 560 && !root.isTrash; glyph: Util.glyphs.list; label: "Liste"; active: root.view === "list"; onClicked: root.view = "list" }
-            IconButton { visible: root.width >= 560 && !root.isTrash; glyph: Util.glyphs.grid; label: "Raster"; active: root.view === "grid"; onClicked: root.view = "grid" }
-            IconButton { visible: root.width >= 560 && !root.isTrash; glyph: Util.glyphs.usage; label: "Speicher-Karte"; active: root.view === "usage"; onClicked: root.view = root.view === "usage" ? "list" : "usage" }
-            IconButton { visible: root.width >= 560 && !root.isTrash; glyph: root.showHidden ? Util.glyphs.eye : Util.glyphs.eyeOff; label: "Versteckte Dateien"; active: root.showHidden; onClicked: root.toggleHidden() }
-            IconButton { visible: !root.readOnly; glyph: Util.glyphs.newFolder; label: "Neuer Ordner"; onClicked: root.app.openSheet("mkdir") }
-            TextButton { visible: root.inArchive; label: "Alles entpacken"; onClicked: Files.extractAll(root.app.archiveOf(root.path)) }
-            TextButton { visible: root.isTrash; label: "Papierkorb leeren"; enabled: root.entries.length > 0; opacity: enabled ? 1 : 0.35; onClicked: root.app.openSheet("empty") }
+            IconButton { visible: root.width >= 560 && !root.isTrash; glyph: Util.glyphs.list; label: Util.tr(I18n.strings, "Liste"); active: root.view === "list"; onClicked: root.view = "list" }
+            IconButton { visible: root.width >= 560 && !root.isTrash; glyph: Util.glyphs.grid; label: Util.tr(I18n.strings, "Raster"); active: root.view === "grid"; onClicked: root.view = "grid" }
+            IconButton { visible: root.width >= 560 && !root.isTrash; glyph: Util.glyphs.usage; label: Util.tr(I18n.strings, "Speicher-Karte"); active: root.view === "usage"; onClicked: root.view = root.view === "usage" ? "list" : "usage" }
+            IconButton { visible: root.width >= 560 && !root.isTrash; glyph: root.showHidden ? Util.glyphs.eye : Util.glyphs.eyeOff; label: Util.tr(I18n.strings, "Versteckte Dateien"); active: root.showHidden; onClicked: root.toggleHidden() }
+            IconButton { visible: !root.readOnly; glyph: Util.glyphs.newFolder; label: Util.tr(I18n.strings, "Neuer Ordner"); onClicked: root.app.openSheet("mkdir") }
+            TextButton { visible: root.inArchive; label: Util.tr(I18n.strings, "Alles entpacken"); onClicked: Files.extractAll(root.app.archiveOf(root.path)) }
+            TextButton { visible: root.isTrash; label: Util.tr(I18n.strings, "Papierkorb leeren"); enabled: root.entries.length > 0; opacity: enabled ? 1 : 0.35; onClicked: root.app.openSheet("empty") }
         }
     }
 
@@ -579,8 +579,8 @@ FocusScope {
             height: visible ? 24 : 0
 
             SectionLabel { x: 44; anchors.verticalCenter: parent.verticalCenter; text: "Name" }
-            SectionLabel { visible: list.sizeWidth > 0; x: parent.width - list.dateWidth - list.sizeWidth; width: 84; horizontalAlignment: Text.AlignRight; anchors.verticalCenter: parent.verticalCenter; text: "Größe" }
-            SectionLabel { visible: list.dateWidth > 0; x: parent.width - list.dateWidth; anchors.verticalCenter: parent.verticalCenter; text: "Geändert" }
+            SectionLabel { visible: list.sizeWidth > 0; x: parent.width - list.dateWidth - list.sizeWidth; width: 84; horizontalAlignment: Text.AlignRight; anchors.verticalCenter: parent.verticalCenter; text: Util.tr(I18n.strings, "Größe") }
+            SectionLabel { visible: list.dateWidth > 0; x: parent.width - list.dateWidth; anchors.verticalCenter: parent.verticalCenter; text: Util.tr(I18n.strings, "Geändert") }
         }
 
         ListView {
@@ -828,7 +828,8 @@ FocusScope {
             x: 16
             height: visible ? 24 : 0
             verticalAlignment: Text.AlignVCenter
-            text: Util.size(root.usageTotal) + " belegt" + (root.usageDone ? "" : "  ·  misst …")
+            text: Util.tr(I18n.strings, "{size} belegt", { size: Util.size(root.usageTotal) })
+                + (root.usageDone ? "" : "  ·  " + Util.tr(I18n.strings, "misst …"))
             color: Theme.fgMuted
             font.family: Theme.fontMono
             font.pixelSize: 11
@@ -1058,8 +1059,8 @@ FocusScope {
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: root.error ? "Kein Zugriff" : filterField.text ? "Nichts passt zu „" + filterField.text + "“"
-                    : root.isTrash ? "Der Papierkorb ist leer" : "Dieser Ordner ist leer"
+                text: root.error ? Util.tr(I18n.strings, "Kein Zugriff") : filterField.text ? Util.tr(I18n.strings, "Nichts passt zu „{filter}“", { filter: filterField.text })
+                    : root.isTrash ? Util.tr(I18n.strings, "Der Papierkorb ist leer") : Util.tr(I18n.strings, "Dieser Ordner ist leer")
                 color: Theme.fg
                 font.family: Theme.fontUi
                 font.pixelSize: 14
@@ -1116,11 +1117,12 @@ FocusScope {
                 if (count > 0) {
                     const bytes = root.shown.filter(entry => root.picked[entry.path] && !entry.dir)
                         .reduce((sum, entry) => sum + entry.size, 0)
-                    return count + " ausgewählt" + (bytes ? "  ·  " + Util.size(bytes) : "")
+                    return Util.tr(I18n.strings, "{n} ausgewählt", { n: count }) + (bytes ? "  ·  " + Util.size(bytes) : "")
                 }
                 const folders = root.shown.filter(entry => entry.dir).length
                 const files = root.shown.length - folders
-                return folders + " Ordner  ·  " + files + (files === 1 ? " Datei" : " Dateien")
+                return Util.tr(I18n.strings, "{n} Ordner", { n: folders }) + "  ·  "
+                    + Util.tr(I18n.strings, files === 1 ? "{n} Datei" : "{n} Dateien", { n: files })
             }
             color: root.isActive && root.app.message && root.app.failed ? Theme.danger : Theme.fgMuted
             font.family: Theme.fontUi
@@ -1132,7 +1134,8 @@ FocusScope {
             anchors.right: parent.right
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 2
-            text: root.path ? Files.space(root.path) : ""
+            // Reading I18n.lang re-asks the backend, which words "free", when the language changes.
+            text: I18n.lang && root.path ? Files.space(root.path) : ""
             color: Theme.fgMuted
             font.family: Theme.fontMono
             font.pixelSize: 11
