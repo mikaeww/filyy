@@ -10,6 +10,7 @@ Window {
 
     readonly property string home: Files.home()
     readonly property string trashPath: Files.trashPath()
+    readonly property alias quickLook: quickLook
     // Hyprland tiles and groups ignore minimumWidth, so the layout has to fold instead.
     readonly property bool compact: card.width < 980
     readonly property bool shown: card.opacity > 0
@@ -267,6 +268,7 @@ Window {
         const several = p.targets.length > 1
         return [
             { label: "Öffnen", glyph: Util.glyphs.open, hint: "Enter", enabled: !several, run: () => p.activate(entry) },
+            { label: "Vorschau", glyph: Util.glyphs.preview, hint: "Leertaste", enabled: !several, run: () => quickLook.show(p.shown, p.cursor) },
             { label: "In neuem Tab", glyph: Util.glyphs.tab, hint: "Mittelklick", enabled: entry.dir && !several, run: () => newTab(entry.path) },
             { label: "Im Terminal öffnen", glyph: Util.glyphs.terminal, enabled: entry.dir && !several, run: () => Files.terminal(entry.path) },
             { separator: true },
@@ -739,6 +741,11 @@ Window {
                 onClicked: win.confirmSheet()
             }
         }
+    }
+
+    QuickLook {
+        id: quickLook
+        app: win
     }
 
     Sheet {

@@ -15,6 +15,8 @@ Item {
     readonly property alias card: card
     signal dismissed()
     signal accepted()
+    // Every key on the card first; leave it unaccepted to get Esc = dismiss, Enter = accept.
+    signal keyPressed(var event)
 
     anchors.fill: parent
     visible: reveal > 0
@@ -59,9 +61,18 @@ Item {
         border.color: Theme.hairline
         opacity: root.reveal
         scale: 0.97 + 0.03 * root.reveal
-        Keys.onEscapePressed: root.dismissed()
-        Keys.onReturnPressed: root.accepted()
-        Keys.onEnterPressed: root.accepted()
+        Keys.onPressed: event => {
+            root.keyPressed(event)
+            if (event.accepted)
+                return
+            if (event.key === Qt.Key_Escape)
+                root.dismissed()
+            else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                root.accepted()
+            else
+                return
+            event.accepted = true
+        }
 
         MouseArea { anchors.fill: parent }
 

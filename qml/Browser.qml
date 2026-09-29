@@ -216,6 +216,7 @@ FocusScope {
         else if (event.key === Qt.Key_PageDown) moveCursor(10 * columns, shift)
         else if (event.key === Qt.Key_PageUp) moveCursor(-10 * columns, shift)
         else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) activate(current)
+        else if (event.key === Qt.Key_Space && current) app.quickLook.show(shown, cursor)
         else if (event.key === Qt.Key_Backspace) up()
         else if (event.key === Qt.Key_Delete) app.openSheet(isTrash ? "purge" : shift ? "delete" : "trash")
         else if (isTrash && (event.key === Qt.Key_F2 || event.key === Qt.Key_F10

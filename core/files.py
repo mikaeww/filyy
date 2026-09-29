@@ -104,6 +104,13 @@ class Files(QObject):
         info = QStorageInfo(path)
         return f"{human(info.bytesAvailable())} frei" if info.isValid() else ""
 
+    @Slot(str, result=int)
+    def count(self, path):
+        try:
+            return sum(1 for entry in os.scandir(path) if not entry.name.startswith("."))
+        except OSError:
+            return 0
+
     @Slot(str, result="QVariantMap")
     def info(self, path):
         try:
