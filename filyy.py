@@ -195,6 +195,12 @@ class Theme(QObject):
     fontMono = Property(str, lambda self: self._theme["fontMono"], notify=changed)
     reducedMotion = Property(bool, lambda self: self._theme["reducedMotion"], notify=changed)
     terminal = Property(str, lambda self: self._theme["terminal"], notify=changed)
+    # Shared shape and motion, so every QML file agrees with the shell's settings panel.
+    control = Property(int, lambda self: 0 if self._theme["square"] else round(self._theme["radius"] / 2), notify=changed)
+    enterMs = Property(int, lambda self: 0 if self._theme["reducedMotion"] else 220, notify=changed)
+    exitMs = Property(int, lambda self: 0 if self._theme["reducedMotion"] else 150, notify=changed)
+    quickMs = Property(int, lambda self: 0 if self._theme["reducedMotion"] else 140, notify=changed)
+    iconFont = Property(str, lambda self: "Monofur Nerd Font", constant=True)
 
 
 class Files(QObject):
@@ -417,19 +423,27 @@ def main():
     QGuiApplication.setDesktopFileName("filyy")
     app = QGuiApplication(sys.argv)
     app.setWindowIcon(QIcon(str(HERE / "assets/filyy.svg")))
-    theme = Theme()
-    files = Files(theme)
-    qmlRegisterSingletonInstance(Theme, "Filyy", 1, 0, "Theme", theme)
-    qmlRegisterSingletonInstance(Files, "Filyy", 1, 0, "Files", files)
     arg = sys.argv[1] if len(sys.argv) > 1 else HOME
     # "Öffnen mit" hands over file:// URLs, a terminal a plain path.
     start = os.path.abspath(os.path.expanduser(QUrl(arg).toLocalFile() if arg.startswith("file://") else arg))
-    engine = QQmlApplicationEngine()
-    engine.setInitialProperties({"startPath": start if os.path.isdir(start) else HOME})
-    engine.load(str(HERE / "qml/Main.qml"))
+    engine = build_engine(start)
     if not engine.rootObjects():
         sys.exit(1)
     sys.exit(app.exec())
+
+
+def build_engine(start):
+    """Registers the backend and loads the window; the offscreen render check uses this too."""
+    # Module-level so Python keeps the singletons alive as long as QML uses them.
+    global _backend
+    theme = Theme()
+    _backend = [theme, Files(theme)]
+    for obj in _backend:
+        qmlRegisterSingletonInstance(type(obj), "Filyy", 1, 0, type(obj).__name__, obj)
+    engine = QQmlApplicationEngine()
+    engine.setInitialProperties({"startPath": start if os.path.isdir(start) else HOME})
+    engine.load(str(HERE / "qml/Main.qml"))
+    return engine
 
 
 if __name__ == "__main__":
