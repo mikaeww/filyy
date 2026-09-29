@@ -142,7 +142,8 @@ FocusScope {
             return
         // In the trash, opening only looks: restoring is a deliberate menu action.
         if (isTrash)
-            app.quickLook.show(shown, Math.max(0, shown.indexOf(entry)))
+            // By path: QML hands out a new wrapper object per access, so indexOf never finds the entry.
+            app.quickLook.show(shown, Math.max(0, shown.findIndex(e => e.path === entry.path)))
         else if (inArchive && !entry.dir)
             Files.openArchived(entry.path)
         else if (entry.dir || Files.isArchive(entry.path))
