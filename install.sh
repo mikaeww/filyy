@@ -1,11 +1,11 @@
 #!/bin/sh
-# Links Filyy into ~/.local so it starts as `filyy`, from the launcher and with its icon.
+# Builds the Hyprland preload and links Filyy, its launcher entry and icon into ~/.local.
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$here/build"
-cc -shared -fPIC -O2 -Wall -o "$here/build/libnosuspend.so" "$here/nosuspend.c" -lwayland-client -ldl
+cc -shared -fPIC -O2 -Wall -o "$here/build/libnosuspend.so" "$here/src/filyy/platform/nosuspend.c" -lwayland-client -ldl
 mkdir -p ~/.local/bin ~/.local/share/applications ~/.local/share/icons/hicolor/256x256/apps
-ln -sf "$here/filyy.py" ~/.local/bin/filyy
+ln -sf "$here/filyy" ~/.local/bin/filyy
 ln -sf "$here/filyy.desktop" ~/.local/share/applications/filyy.desktop
 # The ghost icon an earlier install left behind would win over the PNG as the scalable one.
 rm -f ~/.local/share/icons/hicolor/scalable/apps/filyy.svg

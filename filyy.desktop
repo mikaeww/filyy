@@ -2,7 +2,7 @@
 Type=Application
 Name=Filyy
 GenericName=Dateimanager
-Comment=Dateien im Ghostly-QShell-Look durchsuchen
+Comment=Dateien durchsuchen und verwalten
 Exec=filyy %u
 Icon=filyy
 Terminal=false

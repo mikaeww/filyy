@@ -1,25 +1,26 @@
-"""Runnable checks for the backend: python3 tests/test_core.py"""
+"""Checks for the backend, each against files it creates in a temporary folder. Run by tools/check.py."""
 import os
 import sys
 import tempfile
+import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from core import trash as trashcan
-from core.jobs import CHUNK, KEEP_BOTH, REPLACE, SKIP, Job, Jobs
-from core import archive, i18n
-from core.apps import all_apps, handlers
-from core.gitinfo import info as git_info
-from core.jump import fuzzy, rank
-from core.rename import apply as apply_rename, kebab, plan
-from core.prefs import Prefs
-from core.search import parse as parse_match
-from core.thumbs import cache_path, fresh, generate
-from core.undo import revert
-from core.usage import disk_usage
-from core.fs import checked_name, human, kind_of, listing, natural_key
-from core.theme import preset_colors, shell_theme
+from filyy import desktop, i18n  # noqa: E402
+from filyy.filesystem import archive  # noqa: E402
+from filyy.filesystem import trash as trashcan  # noqa: E402
+from filyy.filesystem.jobs import CHUNK, KEEP_BOTH, REPLACE, SKIP, Job, Jobs  # noqa: E402
+from filyy.filesystem.listing import checked_name, human, kind_of, listing, natural_key  # noqa: E402
+from filyy.filesystem.rename import apply as apply_rename, kebab, plan  # noqa: E402
+from filyy.filesystem.undo import revert  # noqa: E402
+from filyy.lookup.git import info as git_info  # noqa: E402
+from filyy.lookup.jump import fuzzy, rank  # noqa: E402
+from filyy.lookup.search import parse as parse_match  # noqa: E402
+from filyy.lookup.usage import disk_usage  # noqa: E402
+from filyy.preferences import Prefs  # noqa: E402
+from filyy.preview.apps import all_apps, handlers  # noqa: E402
+from filyy.preview.thumbs import cache_path, fresh, generate  # noqa: E402
 
 
 def main():
@@ -41,15 +42,10 @@ def main():
                 raise AssertionError(bad)
             except ValueError:
                 pass
-        qml = 'id: "rose"\n colors: {\n bg: "#2c2429",\n fg: "#f0e1e6"\n }\n id: "x" colors: { bg: "#000000" }'
-        assert preset_colors(qml, "rose") == {"bg": "#2c2429", "fg": "#f0e1e6"}
-        (Path(tmp) / "preferences.ini").write_text(
-            '[Shell]\npresetId=rose\ncustomEnabled=true\ncornerStyle=square\n'
-            'customJson="{\\"bg\\":\\"#000000\\",\\"nope\\":\\"#ffffff\\"}"\n')
-        (Path(tmp) / "ThemePresets.qml").write_text(qml)
-        theme = shell_theme(Path(tmp))
-        assert theme["colors"]["bg"] == "#000000" and theme["colors"]["fg"] == "#f0e1e6", theme
-        assert "nope" not in theme["colors"] and theme["square"] and theme["radius"] == 0
+        assert desktop.read(Path(tmp) / "no-shell") == desktop.FALLBACK
+        (Path(tmp) / "preferences.ini").write_text("[Shell]\nfontUi=Inter\nterminal=foot\nreducedMotion=true\n")
+        shell = desktop.read(Path(tmp))
+        assert shell == {"fontUi": "Inter", "fontMono": "monospace", "terminal": "foot", "reducedMotion": True}, shell
     assert human(512) == "512 B" and human(1536) == "1.5 KB"
     with tempfile.TemporaryDirectory() as tmp:
         trash(Path(tmp))
@@ -78,7 +74,8 @@ def main():
 
 
 def run(kind, sources, folder, bin_dir, policy=None):
-    job = Job(kind, [str(s) for s in sources], str(folder), lambda p: trashcan.trash(p, str(bin_dir)), policy=policy)
+    job = Job(kind, [str(s) for s in sources], str(folder), lambda p: trashcan.trash(p, str(bin_dir)))
+    job.policy = policy
     job.run()
     return job
 
@@ -197,11 +194,11 @@ def rename(root):
     for name in ("IMG_001.JPG", "IMG_002.JPG", "a.txt", "b.txt"):
         (root / name).write_text(name)
     photos = [str(root / "IMG_001.JPG"), str(root / "IMG_002.JPG")]
-    rows = plan(photos, find="IMG_", replace="", template="urlaub-{n}", case="kebab")
+    rows = plan(photos, {"find": "IMG_", "replace": "", "template": "urlaub-{n}", "case": "kebab"})
     assert [r["new"] for r in rows] == ["urlaub-1.jpg", "urlaub-2.jpg"], rows
-    assert plan(photos * 1, template="gleich")[0]["error"] == "Doppelter Name"
-    assert plan([str(root / "a.txt")], template="b")[0]["error"] == "Name ist schon vergeben"
-    assert plan([str(root / "a.txt")], find="(", regex=True)[0]["error"].startswith("Regex")
+    assert plan(photos * 1, {"template": "gleich"})[0]["error"] == "Doppelter Name"
+    assert plan([str(root / "a.txt")], {"template": "b"})[0]["error"] == "Name ist schon vergeben"
+    assert plan([str(root / "a.txt")], {"find": "(", "regex": True})[0]["error"].startswith("Regex")
     assert kebab("Mein Urlaub_2026 Bild") == "mein-urlaub-2026-bild" and kebab("fooBar") == "foo-bar"
     steps = apply_rename(rows)
     assert sorted(p.name for p in root.iterdir()) == ["a.txt", "b.txt", "urlaub-1.jpg", "urlaub-2.jpg"]
@@ -320,19 +317,19 @@ def archives(root):
 
 def prefs(root):
     path = str(root / "filyy.ini")
-    first = Prefs(path)
+    first = Prefs(path, shell=root)
     assert first.get("view", "list") == "list", "defaults before anything is saved"
     session = {"index": 1, "tabs": [{"path": "/a", "split": False}, {"path": "/b", "split": True, "second": "/c"}]}
     first.set("view", "grid")
     first.set("hidden", True)
     first.set("session", session)
-    again = Prefs(path)
+    again = Prefs(path, shell=root)
     assert again.get("view") == "grid" and again.get("hidden") is True and again.get("session") == session
 
 
 def tr_arguments(text):
-    """The first argument of every Util.tr(I18n.strings, ...) call, parsed with quotes and brackets in mind."""
-    marker = "Util.tr(I18n.strings, "
+    """The first argument of every Format.tr(I18n.strings, ...) call, parsed with quotes and brackets in mind."""
+    marker = "Format.tr(I18n.strings, "
     at = text.find(marker)
     while at >= 0:
         i, depth, quote = at + len(marker), 0, None
@@ -361,13 +358,15 @@ def tr_arguments(text):
 
 def translations():
     import re
-    root = Path(__file__).resolve().parent.parent
+    root = Path(__file__).resolve().parent.parent / "src/filyy"
     keys = set()
-    for qml in (root / "qml").glob("*.qml"):
+    for qml in (root / "qml").rglob("*.qml"):
         for argument in tr_arguments(qml.read_text()):
             keys.update(re.findall(r'"((?:[^"\\]|\\.)*)"', argument))
-    keys.update(re.findall(r'\[\d+, "([^"]+)"', (root / "qml" / "Util.js").read_text()))
-    for py in (root / "core").glob("*.py"):
+        # The context menu wraps Format.tr in a short t().
+        keys.update(re.findall(r'\bt\("([^"]+)"', qml.read_text()))
+    keys.update(re.findall(r'\[\d+, "([^"]+)"', (root / "qml" / "format.js").read_text()))
+    for py in root.rglob("*.py"):
         keys.update(re.findall(r'\btr\(\s*"([^"]+)"', py.read_text()))
     # Undo labels are stored in German and translated when shown.
     keys.update(["Neuer Ordner", "Umbenennen", "Papierkorb", "Wiederherstellen", "Kopieren", "Verschieben",
@@ -400,6 +399,11 @@ def job_list(root):
     assert jobs.property("items") == [] and jobs.property("busy") is False, jobs.property("items")
     assert len(finished) == 3 and all(ok for ok, _ in finished), finished
     del app
+
+
+class BackendTest(unittest.TestCase):
+    def test_backend(self):
+        main()
 
 
 if __name__ == "__main__":

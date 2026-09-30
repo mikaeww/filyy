@@ -1,0 +1,4 @@
+#!/bin/sh
+# Starts Filyy from this checkout; install.sh links ~/.local/bin/filyy here.
+here=$(dirname "$(readlink -f "$0")")
+PYTHONPATH="$here/src${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m filyy "$@"

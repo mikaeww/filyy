@@ -21,6 +21,7 @@ Written in Python with Qt Quick (PySide6).
 - Git status for the folder you are in
 - Open with any installed app, video thumbnails, drag and drop
 - Pixel icons for file types
+- Dark and light, following the system unless you pick one
 - English and German, switchable in the settings (gear, bottom left)
 
 ## Install
@@ -34,6 +35,16 @@ cd filyy
 ./install.sh
 filyy
 ```
+
+## Development
+
+```sh
+python3 tools/check.py              # structure limits, QML format and lint, all tests
+python3 tools/render.py out.png     # offscreen screenshot of a sample folder, see --help in the file
+```
+
+The code lives in `src/filyy` (Python backend) and `src/filyy/qml` (interface). Rules and decisions are in
+[docs/](docs/README.md).
 
 ## Shortcuts
 
