@@ -24,8 +24,6 @@ Window {
     property var pane: null
     property int tabIndex: 0
     property string message: ""
-    // True while a copy or move runs; the ghost looks busy.
-    readonly property bool busy: Jobs.busy
     // The first job waiting for an answer about an existing file, if any.
     readonly property var conflict: Array.from(Jobs.items || []).find(job => job.state === "conflict") ?? null
     property bool conflictForAll: false

@@ -52,7 +52,7 @@ def main():
     QGuiApplication.setApplicationName("Filyy")
     QGuiApplication.setDesktopFileName("filyy")
     app = QGuiApplication(sys.argv)
-    app.setWindowIcon(QIcon(str(HERE / "assets/filyy.svg")))
+    app.setWindowIcon(QIcon(str(HERE / "assets/filyy.png")))
     arg = sys.argv[1] if len(sys.argv) > 1 else ""
     # "Öffnen mit" hands over file:// URLs, a terminal a plain path.
     start = os.path.abspath(os.path.expanduser(QUrl(arg).toLocalFile() if arg.startswith("file://") else arg)) if arg else HOME

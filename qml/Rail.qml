@@ -19,9 +19,13 @@ Item {
         height: 36
         spacing: 10
 
-        Ghost {
+        Image {
             anchors.verticalCenter: parent.verticalCenter
-            mood: root.app.busy ? "busy" : "idle"
+            width: 32
+            height: 32
+            source: "../assets/filyy.png"
+            sourceSize: Qt.size(64, 64)
+            mipmap: true
         }
 
         Text {

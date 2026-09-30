@@ -20,7 +20,7 @@ Written in Python with Qt Quick (PySide6).
 - A trash you can browse and restore from
 - Git status for the folder you are in
 - Open with any installed app, video thumbnails, drag and drop
-- Pixel icons and a ghost that reacts to what you do
+- Pixel icons for file types
 - English and German, switchable in the settings (gear, bottom left)
 
 ## Install

@@ -1060,11 +1060,14 @@ FocusScope {
             visible: root.shown.length === 0 && !(root.view === "usage" && !root.usageDone)
             spacing: 6
 
-            Ghost {
+            Image {
                 anchors.horizontalCenter: parent.horizontalCenter
                 visible: !root.error
-                size: 96
-                mood: filterField.text || root.isTrash ? "idle" : "sad"
+                width: 96
+                height: 96
+                source: "../assets/filyy.png"
+                sourceSize: Qt.size(192, 192)
+                mipmap: true
             }
 
             Text {
