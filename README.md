@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/filyy.svg" width="96" alt="Filyy ghost holding a folder"></p>
+<p align="center"><img src="assets/filyy.png" width="96" alt="Filyy icon"></p>
 
 # Filyy
 
